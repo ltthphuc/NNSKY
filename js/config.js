@@ -14,6 +14,13 @@
  *   }
  */
 window.SKY_CONFIG = {
-  firebase: null,
+  firebase: {
+    apiKey: 'AIzaSyCrjx2Ipt9AA5JAm0XPxuKurCH-onZ-s4o',
+    authDomain: 'nnsky-336ff.firebaseapp.com',
+    projectId: 'nnsky-336ff',
+    storageBucket: 'nnsky-336ff.firebasestorage.app',
+    messagingSenderId: '659627464074',
+    appId: '1:659627464074:web:62181805b179ff4ec56473'
+  },
   centerName: 'Trung tâm ngoại ngữ Sky'
 };

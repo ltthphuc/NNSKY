@@ -1,0 +1,691 @@
+/*
+ * Nhập / xuất Excel và các file mẫu.
+ *  - Đọc file (nhập dữ liệu): SheetJS
+ *  - Ghi file có định dạng đẹp (tiêu đề, màu, viền, định dạng số, cố định dòng tiêu đề, in A4): ExcelJS
+ */
+(function () {
+  const X = (window.X = {});
+
+  const NAVY = 'FF0E2748', BLUE = 'FF1F6FEB', LINE = 'FFC9D5E8', ZEBRA = 'FFF5F8FD', TOTAL = 'FFE3EEFF', INPUT = 'FFFFF9DB', GRAYTXT = 'FF51607A';
+  const FONT = 'Arial';
+  const MONEY = '#,##0" đ"';
+  const border = { top: { style: 'thin', color: { argb: LINE } }, left: { style: 'thin', color: { argb: LINE } }, bottom: { style: 'thin', color: { argb: LINE } }, right: { style: 'thin', color: { argb: LINE } } };
+
+  const needRead = () => { if (!window.XLSX) throw new Error('Chưa tải được thư viện đọc Excel (cần kết nối mạng).'); };
+  const needWrite = () => { if (!window.ExcelJS) throw new Error('Chưa tải được thư viện xuất Excel (cần kết nối mạng lần đầu).'); };
+  const slug = (s) => U.norm(s).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'file';
+  const center = () => (App.settings && App.settings.centerName) || 'Trung tâm ngoại ngữ Sky';
+  /* mọi hàm xuất: bắt lỗi và báo cho người dùng */
+  const safe = (fn) => (...a) => Promise.resolve().then(() => fn(...a)).catch((e) => { console.error(e); U.toast(e.message || String(e), 'err'); });
+
+  /* ---------- dựng file ---------- */
+  const newBook = () => {
+    needWrite();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = center(); wb.created = new Date();
+    return wb;
+  };
+  const saveBook = async (wb, name) => {
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    U.toast('Đã tạo file ' + name, 'ok');
+  };
+  const pageSetup = (landscape = true) => ({
+    orientation: landscape ? 'landscape' : 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.25, footer: 0.25 },
+  });
+
+  /*
+   * spec = { name, title, info:[..], cols:[{h, w, align, fmt, color(v)}], rows:[[..]], total:[..], notes:[..], freezeCols, sample:Set(rowIndex), inputCols:[idx] }
+   * Trả về { ws, headerRow, firstRow }
+   */
+  function addSheet(wb, s) {
+    const n = s.cols.length;
+    const ws = wb.addWorksheet(s.name.slice(0, 31), { pageSetup: pageSetup(s.landscape !== false), views: [{ showGridLines: false }] });
+    s.cols.forEach((c, i) => { ws.getColumn(i + 1).width = c.w || 14; });
+    let r = 1;
+    const line = (text, font, h) => {
+      if (n > 1) ws.mergeCells(r, 1, r, n);
+      const c = ws.getCell(r, 1);
+      c.value = text; c.font = font; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      if (h) ws.getRow(r).height = h;
+      r++;
+    };
+    line(center().toUpperCase(), { name: FONT, bold: true, size: 11, color: { argb: BLUE } }, 18);
+    line(s.title, { name: FONT, bold: true, size: 16, color: { argb: NAVY } }, 30);
+    (s.info || []).forEach((t) => line(t, { name: FONT, size: 10.5, color: { argb: GRAYTXT } }, 17));
+    r++;
+    const headerRow = r;
+    const hr = ws.getRow(r); hr.height = 30;
+    s.cols.forEach((c, i) => {
+      const cell = hr.getCell(i + 1);
+      cell.value = c.h;
+      cell.font = { name: FONT, bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = border;
+    });
+    r++;
+    const firstRow = r;
+    s.rows.forEach((row, ri) => {
+      const xr = ws.getRow(r); xr.height = 21;
+      s.cols.forEach((c, i) => {
+        const v = row[i];
+        const cell = xr.getCell(i + 1);
+        cell.value = v === '' || v === undefined ? null : v;
+        const isInput = s.inputCols && s.inputCols.includes(i);
+        const sample = s.sample && s.sample.has(ri);
+        cell.font = { name: FONT, size: 10.5, italic: !!sample, color: { argb: sample ? 'FF8A97AD' : (c.color && c.color(v)) || 'FF1B2B45' }, bold: !!(c.bold) };
+        cell.alignment = { horizontal: c.align || (typeof v === 'number' ? 'right' : 'left'), vertical: 'middle', wrapText: !!c.wrap };
+        cell.border = border;
+        if (c.fmt) cell.numFmt = c.fmt;
+        if (isInput) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INPUT } };
+        else if (ri % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } };
+      });
+      r++;
+    });
+    if (s.total) {
+      const tr = ws.getRow(r); tr.height = 24;
+      s.cols.forEach((c, i) => {
+        const cell = tr.getCell(i + 1);
+        const v = s.total[i];
+        cell.value = v === '' || v === undefined ? null : v;
+        cell.font = { name: FONT, bold: true, size: 11, color: { argb: NAVY } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL } };
+        cell.alignment = { horizontal: c.align || (typeof v === 'number' ? 'right' : 'left'), vertical: 'middle' };
+        cell.border = { ...border, top: { style: 'medium', color: { argb: NAVY } } };
+        if (c.fmt) cell.numFmt = c.fmt;
+      });
+      r++;
+    }
+    if (s.notes && s.notes.length) {
+      r++;
+      s.notes.forEach((t) => {
+        if (n > 1) ws.mergeCells(r, 1, r, n);
+        const c = ws.getCell(r, 1);
+        c.value = t; c.font = { name: FONT, italic: true, size: 10, color: { argb: GRAYTXT } };
+        c.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+        ws.getRow(r).height = t.length > 110 ? 30 : 17;
+        r++;
+      });
+    }
+    r++;
+    if (s.signature) {
+      const half = Math.max(1, Math.floor(n / 2));
+      ws.mergeCells(r, 1, r, half); ws.mergeCells(r, half + 1, r, n);
+      [[1, 'Người lập bảng'], [half + 1, 'Chủ trung tâm']].forEach(([col, t]) => {
+        const c = ws.getCell(r, col); c.value = t; c.font = { name: FONT, bold: true, size: 10.5, color: { argb: NAVY } }; c.alignment = { horizontal: 'center' };
+      });
+      r++;
+      ws.mergeCells(r, 1, r, half); ws.mergeCells(r, half + 1, r, n);
+      [1, half + 1].forEach((col) => { const c = ws.getCell(r, col); c.value = '(ký, ghi rõ họ tên)'; c.font = { name: FONT, italic: true, size: 9.5, color: { argb: GRAYTXT } }; c.alignment = { horizontal: 'center' }; });
+    }
+    ws.views = [{ state: 'frozen', xSplit: s.freezeCols || 0, ySplit: headerRow, showGridLines: false }];
+    if (s.rows.length) ws.autoFilter = { from: { row: headerRow, column: 1 }, to: { row: headerRow + s.rows.length, column: n } };
+    ws.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`;
+    ws.headerFooter = { oddFooter: `&L&8${center()}&C&8Trang &P / &N&R&8In ngày &D` };
+    return { ws, headerRow, firstRow };
+  }
+
+  /* Trang hướng dẫn: tiêu đề + các dòng + (tuỳ chọn) bảng mã lớp */
+  function addGuide(wb, title, lines, table) {
+    const ws = wb.addWorksheet('Hướng dẫn', { pageSetup: pageSetup(false), views: [{ showGridLines: false }] });
+    [26, 22, 40].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    let r = 1;
+    ws.mergeCells(r, 1, r, 3);
+    const t = ws.getCell(r, 1); t.value = title; t.font = { name: FONT, bold: true, size: 15, color: { argb: NAVY } }; t.alignment = { horizontal: 'left', vertical: 'middle' };
+    ws.getRow(r).height = 30; r += 2;
+    lines.forEach((l, i) => {
+      ws.mergeCells(r, 1, r, 3);
+      const c = ws.getCell(r, 1); c.value = l; c.font = { name: FONT, size: 11, color: { argb: 'FF1B2B45' } };
+      c.alignment = { wrapText: true, vertical: 'top' };
+      ws.getRow(r).height = l.length > 80 ? 34 : 20;
+      r++;
+    });
+    let range = null;
+    if (table) {
+      r++;
+      const hr = ws.getRow(r); hr.height = 26;
+      table.head.forEach((h, i) => {
+        const c = hr.getCell(i + 1); c.value = h;
+        c.font = { name: FONT, bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+        c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border;
+      });
+      r++;
+      const first = r;
+      table.rows.forEach((row, ri) => {
+        row.forEach((v, i) => {
+          const c = ws.getRow(r).getCell(i + 1); c.value = v; c.font = { name: FONT, size: 10.5 }; c.border = border;
+          if (ri % 2) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } };
+        });
+        r++;
+      });
+      range = `'Hướng dẫn'!$A$${first}:$A$${Math.max(first, r - 1)}`;
+    }
+    return { ws, range };
+  }
+
+  /* ---------- đọc file ---------- */
+  X.read = (file) =>
+    new Promise((resolve, reject) => {
+      needRead();
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error('Không đọc được file.'));
+      fr.onload = () => {
+        try { resolve(XLSX.read(fr.result, { type: 'array' })); } catch (e) { reject(new Error('File không đúng định dạng Excel (.xlsx).')); }
+      };
+      fr.readAsArrayBuffer(file);
+    });
+  const rowsOf = (wb) => XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false, blankrows: true });
+  const findCol = (header, ...names) => {
+    const h = header.map((x) => U.norm(x));
+    for (const n of names) { const i = h.findIndex((x) => x.includes(U.norm(n))); if (i >= 0) return i; }
+    return -1;
+  };
+  /* tìm dòng tiêu đề trong 15 dòng đầu (file mẫu có dòng tiêu đề phía trên) */
+  const headerIndex = (rows, test) => rows.findIndex((r, i) => i < 15 && test(r.map((x) => U.norm(x))));
+  const fixPhone = (p) => { p = String(p || '').replace(/[\s.\-]/g, ''); return /^\d{9}$/.test(p) ? '0' + p : p; };
+  const fixId = (p) => { p = String(p || '').replace(/[\s.\-]/g, ''); return /^\d{11}$/.test(p) ? '0' + p : p; };
+
+  /* ===== Học sinh ===== */
+  X.studentTemplate = safe(async (classes) => {
+    const wb = newBook();
+    const c = classes[0];
+    const code = c ? c.code : 'SKY-AB123';
+    const { ws, headerRow, firstRow } = addSheet(wb, {
+      name: 'Danh sách học sinh', title: 'DANH SÁCH HỌC SINH', landscape: false,
+      info: ['Điền mỗi học sinh một dòng, bắt đầu từ dòng đầu tiên dưới tiêu đề (các dòng "(mẫu)" sẽ tự bị bỏ qua).', 'Cột có dấu * là bắt buộc. Xem thêm trang "Hướng dẫn".'],
+      cols: [{ h: 'Họ và tên *', w: 28 }, { h: 'Mã lớp', w: 18, align: 'center' }, { h: 'Số điện thoại', w: 18, align: 'center' }, { h: 'CCCD', w: 20, align: 'center' }, { h: 'Ghi chú', w: 34 }],
+      rows: [['Nguyễn Văn An (mẫu)', code, '0912345678', '', 'Phụ huynh: Nguyễn Văn B'], ['Trần Thị Bình (mẫu)', code, '0987654321', '079318000123', '']],
+      sample: new Set([0, 1]),
+    });
+    const guide = addGuide(wb, 'HƯỚNG DẪN NHẬP DANH SÁCH HỌC SINH', [
+      '1. Điền thông tin học sinh ở sheet "Danh sách học sinh", mỗi học sinh một dòng. Hai dòng "(mẫu)" sẽ tự bị bỏ qua khi nhập.',
+      '2. "Họ và tên" là bắt buộc. Số điện thoại và CCCD không bắt buộc (học sinh tiểu học có thể chưa có CCCD).',
+      '3. "Mã lớp": chọn từ danh sách xổ xuống (mã có trong bảng bên dưới). Nếu để trống, hệ thống dùng lớp đang chọn trên màn hình Học sinh.',
+      '4. Số điện thoại và CCCD được định dạng văn bản để giữ số 0 ở đầu.',
+      '5. Học sinh trùng họ tên trong cùng một lớp sẽ bị bỏ qua.',
+      '6. Lưu file rồi chọn "Nhập Excel" trên màn hình Học sinh.',
+    ], { head: ['Mã lớp', 'Tên lớp', 'Lịch học'], rows: classes.map((k) => [k.code, k.name, U.scheduleText(k)]) });
+    for (let i = 0; i < 300; i++) {
+      const row = firstRow + i;
+      ws.getCell(row, 3).numFmt = '@'; ws.getCell(row, 4).numFmt = '@';
+      if (i >= 2) for (let col = 1; col <= 5; col++) { const cell = ws.getCell(row, col); cell.border = border; cell.font = { name: FONT, size: 10.5 }; }
+      if (guide.range && classes.length) ws.getCell(row, 2).dataValidation = { type: 'list', allowBlank: true, formulae: [guide.range], showErrorMessage: false };
+      if (i >= 2) ws.getCell(row, 2).alignment = { horizontal: 'center' };
+      if (i >= 2) { ws.getCell(row, 3).alignment = { horizontal: 'center' }; ws.getCell(row, 4).alignment = { horizontal: 'center' }; }
+    }
+    ws.autoFilter = undefined;
+    await saveBook(wb, 'Mau_nhap_hoc_sinh.xlsx');
+  });
+
+  X.parseStudents = async (file) => {
+    const rows = rowsOf(await X.read(file));
+    const hi = headerIndex(rows, (h) => h.some((x) => x.includes('ho va ten') || x.includes('ho ten')));
+    if (hi < 0) throw new Error('Không tìm thấy cột "Họ và tên". Hãy dùng file mẫu của hệ thống.');
+    const h = rows[hi];
+    const iName = findCol(h, 'ho va ten', 'ho ten');
+    const iClass = findCol(h, 'ma lop', 'lop');
+    const iPhone = findCol(h, 'so dien thoai', 'sdt', 'dien thoai');
+    const iId = findCol(h, 'cccd', 'can cuoc');
+    const iNote = findCol(h, 'ghi chu');
+    return rows.slice(hi + 1).map((r, i) => ({
+      line: hi + i + 2,
+      name: String(r[iName] || '').replace(/\s+/g, ' ').trim(),
+      classCode: iClass >= 0 ? String(r[iClass] || '').trim() : '',
+      phone: iPhone >= 0 ? fixPhone(r[iPhone]) : '',
+      cccd: iId >= 0 ? fixId(r[iId]) : '',
+      note: iNote >= 0 ? String(r[iNote] || '').trim() : '',
+    })).filter((r) => (r.name || r.phone) && !/\(mẫu\)\s*$/i.test(r.name));
+  };
+
+  X.exportStudents = safe(async (list, classOf, canSeeId) => {
+    const wb = newBook();
+    addSheet(wb, {
+      name: 'Học sinh', title: 'DANH SÁCH HỌC SINH', info: [`Ngày xuất: ${U.fmtDate(U.today())} · Tổng số: ${list.length} học sinh`],
+      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, { h: 'Lớp', w: 12, align: 'center' }, { h: 'Mã lớp', w: 14, align: 'center' },
+        { h: 'Số điện thoại', w: 16, align: 'center' }, { h: 'CCCD', w: 18, align: 'center' }, { h: 'Trạng thái', w: 12, align: 'center', color: (v) => (v === 'Đã nghỉ' ? 'FFB45309' : 'FF0E7A3E') }, { h: 'Ghi chú', w: 32 }],
+      rows: list.map((s, i) => { const c = classOf(s.classId) || {}; return [i + 1, s.code || '', s.name, c.name || '', c.code || '', s.phone || '', canSeeId ? s.cccd || '' : U.maskId(s.cccd || ''), s.status === 'inactive' ? 'Đã nghỉ' : 'Đang học', s.note || '']; }),
+      freezeCols: 3,
+    });
+    await saveBook(wb, `Danh_sach_hoc_sinh_${U.today()}.xlsx`);
+  });
+
+  /* ===== Điểm đánh giá ===== */
+  X.scoreTemplate = safe(async (cls, students, title, date) => {
+    const wb = newBook();
+    const { ws, firstRow } = addSheet(wb, {
+      name: 'Nhập điểm', title: 'BẢNG NHẬP ĐIỂM ĐÁNH GIÁ', landscape: false,
+      info: [`Lớp: ${cls.name} (${cls.code})`, `Bài đánh giá: ${title || ''}${date ? ' · Ngày ' + U.fmtDate(date) : ''}`, 'Chỉ điền vào các ô màu vàng (Điểm và Nhận xét).'],
+      cols: [{ h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, { h: 'Điểm (0-10)', w: 14, align: 'center', fmt: '0.0#' }, { h: 'Nhận xét', w: 52, wrap: true }],
+      rows: students.map((s) => [s.code || '', s.name, '', '']),
+      inputCols: [2, 3],
+    });
+    students.forEach((s, i) => {
+      ws.getCell(firstRow + i, 3).dataValidation = { type: 'decimal', operator: 'between', formulae: [0, 10], allowBlank: true, showErrorMessage: true, errorTitle: 'Điểm không hợp lệ', error: 'Vui lòng nhập điểm từ 0 đến 10.' };
+    });
+    addGuide(wb, 'HƯỚNG DẪN NHẬP ĐIỂM', [
+      `Lớp: ${cls.name} (${cls.code})`,
+      `Bài đánh giá: ${title || ''}${date ? ' - ngày ' + U.fmtDate(date) : ''}`,
+      '1. Chỉ điền cột "Điểm (0-10)" và "Nhận xét" (ô màu vàng). Không sửa cột "Mã HS" và "Họ và tên".',
+      '2. Điểm từ 0 đến 10, có thể dùng số thập phân (ví dụ 8.5 hoặc 8,5).',
+      '3. Để trống điểm nếu học sinh vắng hoặc chưa chấm.',
+      '4. Lưu file rồi chọn "Nhập từ Excel" trên màn hình Đánh giá.',
+    ]);
+    await saveBook(wb, `Mau_nhap_diem_${slug(cls.code)}.xlsx`);
+  });
+
+  X.parseScores = async (file) => {
+    const rows = rowsOf(await X.read(file));
+    const hi = headerIndex(rows, (h) => h.some((x) => x.includes('diem')) && h.some((x) => x.includes('ma hs') || x.includes('ho va ten')));
+    if (hi < 0) throw new Error('File không đúng mẫu. Hãy dùng "Tải file mẫu" của hệ thống.');
+    const h = rows[hi];
+    const iCode = findCol(h, 'ma hs', 'ma hoc sinh');
+    const iName = findCol(h, 'ho va ten', 'ho ten');
+    const iScore = findCol(h, 'diem');
+    const iCmt = findCol(h, 'nhan xet');
+    return rows.slice(hi + 1).map((r) => ({
+      code: iCode >= 0 ? String(r[iCode] || '').trim() : '',
+      name: iName >= 0 ? String(r[iName] || '').trim() : '',
+      score: String(r[iScore] ?? '').trim().replace(',', '.'),
+      comment: iCmt >= 0 ? String(r[iCmt] || '').trim() : '',
+    }));
+  };
+
+  const scoreColor = (v) => (typeof v !== 'number' ? undefined : v >= 8 ? 'FF0E7A3E' : v >= 6.5 ? 'FF1F6FEB' : v >= 5 ? 'FFB45309' : 'FFC62828');
+  const avgOf = (a) => { const n = a.filter((x) => typeof x === 'number'); return n.length ? Math.round((n.reduce((s, x) => s + x, 0) / n.length) * 100) / 100 : ''; };
+
+  X.exportScores = safe(async (cls, a, students) => {
+    const wb = newBook();
+    const vals = students.map((s) => (a.scores && a.scores[s.id] != null ? Number(a.scores[s.id]) : ''));
+    addSheet(wb, {
+      name: 'Điểm', title: 'BẢNG ĐIỂM ĐÁNH GIÁ', landscape: false,
+      info: [`Lớp: ${cls.name} (${cls.code})`, `Bài đánh giá: ${a.title} · Ngày ${U.fmtDate(a.date)}`],
+      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, { h: 'Điểm', w: 10, align: 'center', fmt: '0.0#', bold: true, color: scoreColor }, { h: 'Nhận xét', w: 52, wrap: true }],
+      rows: students.map((s, i) => [i + 1, s.code || '', s.name, vals[i], (a.comments && a.comments[s.id]) || '']),
+      total: ['', '', 'Điểm trung bình lớp', avgOf(vals), ''], signature: true,
+    });
+    await saveBook(wb, `Diem_${slug(cls.code)}_${a.date}.xlsx`);
+  });
+
+  X.exportScoreMatrix = safe(async (cls, assessments, students) => {
+    const wb = newBook();
+    const rows = students.map((s, i) => {
+      const v = assessments.map((a) => (a.scores && a.scores[s.id] != null && a.scores[s.id] !== '' ? Number(a.scores[s.id]) : ''));
+      return [i + 1, s.code || '', s.name, ...v, avgOf(v)];
+    });
+    const colAvg = assessments.map((_, j) => avgOf(rows.map((r) => r[3 + j])));
+    addSheet(wb, {
+      name: 'Tổng hợp điểm', title: 'TỔNG HỢP ĐIỂM ĐÁNH GIÁ', info: [`Lớp: ${cls.name} (${cls.code}) · ${assessments.length} bài đánh giá`],
+      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 20 }, { h: 'Họ và tên', w: 28, bold: true },
+        ...assessments.map((a) => ({ h: `${a.title}\n${U.shortDate(a.date)}`, w: 16, align: 'center', fmt: '0.0#', color: scoreColor })),
+        { h: 'Điểm TB', w: 11, align: 'center', fmt: '0.0#', bold: true, color: scoreColor }],
+      rows, total: ['', '', 'Trung bình lớp', ...colAvg, avgOf(rows.map((r) => r[r.length - 1]))], freezeCols: 3,
+      notes: ['File này dùng được làm mẫu để nhập lại điểm nhiều bài kiểm tra cùng lúc: mỗi cột là một bài, tiêu đề cột gồm tên bài, xuống dòng, rồi ngày/tháng.'],
+    });
+    await saveBook(wb, `Tong_hop_diem_${slug(cls.code)}.xlsx`);
+  });
+
+  /* ===== Điểm danh tháng ===== */
+  X.exportAttendance = safe(async (cls, month, students, dates, docsByDate) => {
+    const wb = newBook();
+    const mark = (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E');
+    const rows = students.map((s, i) => {
+      let p = 0, a = 0;
+      const cells = dates.map((d) => {
+        const v = docsByDate[d] && docsByDate[d].records && docsByDate[d].records[s.id];
+        if (v === true) { p++; return '✓'; }
+        if (v === false) { a++; return 'V'; }
+        return '';
+      });
+      return [i + 1, s.code || '', s.name, ...cells, p, a];
+    });
+    addSheet(wb, {
+      name: 'Điểm danh', title: `BẢNG ĐIỂM DANH ${U.monthLabel(month).toUpperCase()}`,
+      info: [`Lớp: ${cls.name} (${cls.code}) · ${U.scheduleText(cls)}`, `Giáo viên: ${App.teacherName(cls.teacherId)}${cls.assistantId ? ' · Trợ giảng: ' + App.teacherName(cls.assistantId) : ''}`],
+      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 20 }, { h: 'Họ và tên', w: 28, bold: true },
+        ...dates.map((d) => ({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 8, align: 'center', color: mark, bold: true })),
+        { h: 'Có mặt', w: 9, align: 'center', color: () => 'FF0E7A3E', bold: true }, { h: 'Vắng', w: 9, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : 'FF8A97AD'), bold: true }],
+      rows, freezeCols: 3, notes: ['Ghi chú: ✓ = có mặt, V = vắng, ô trống = chưa điểm danh. File này dùng được làm mẫu để nhập lại điểm danh (✓ hoặc x = có mặt, V = vắng).'], signature: true,
+    });
+    await saveBook(wb, `Diem_danh_${slug(cls.code)}_${month}.xlsx`);
+  });
+
+  /* ===== Lương giáo viên ===== */
+  X.exportPayroll = safe(async (rows, month) => {
+    const wb = newBook();
+    addSheet(wb, {
+      name: 'Tổng hợp', title: `BẢNG TỔNG HỢP TIỀN GIÁO VIÊN ${U.monthLabel(month).toUpperCase()}`, info: ['Tiền giáo viên = số tiết đã dạy × đơn giá mỗi tiết'],
+      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Giáo viên', w: 28, bold: true }, { h: 'Số buổi dạy', w: 13, align: 'center' }, { h: 'Số buổi nghỉ', w: 13, align: 'center' },
+        { h: 'Tổng số tiết', w: 13, align: 'center' }, { h: 'Thành tiền', w: 18, fmt: MONEY, bold: true }, { h: 'Trạng thái', w: 13, align: 'center', color: (v) => (v === 'Đã trả' ? 'FF0E7A3E' : 'FFB45309') }],
+      rows: rows.map((r, i) => [i + 1, r.teacher.name, r.sessions, r.absent, r.periods, r.amount, r.paid ? 'Đã trả' : 'Chưa trả']),
+      total: ['', 'TỔNG CỘNG', rows.reduce((s, r) => s + r.sessions, 0), rows.reduce((s, r) => s + r.absent, 0), rows.reduce((s, r) => s + r.periods, 0), rows.reduce((s, r) => s + r.amount, 0), ''],
+      signature: true,
+    });
+    const det = [];
+    rows.forEach((r) => Object.values(r.lines).forEach((l) => det.push([r.teacher.name, `${l.cls.name} (${l.cls.code})`, U.roleName(l.role), l.sessions, l.periods, l.rate, l.amount])));
+    addSheet(wb, {
+      name: 'Chi tiết theo lớp', title: `CHI TIẾT GIỜ DẠY THEO LỚP ${U.monthLabel(month).toUpperCase()}`,
+      cols: [{ h: 'Giáo viên', w: 26, bold: true }, { h: 'Lớp', w: 32 }, { h: 'Vai trò', w: 18 }, { h: 'Số buổi', w: 10, align: 'center' }, { h: 'Số tiết', w: 10, align: 'center' }, { h: 'Đơn giá/tiết', w: 15, fmt: MONEY }, { h: 'Thành tiền', w: 18, fmt: MONEY, bold: true }],
+      rows: det, total: ['TỔNG', '', '', det.reduce((s, r) => s + r[3], 0), det.reduce((s, r) => s + r[4], 0), '', det.reduce((s, r) => s + r[6], 0)],
+    });
+    await saveBook(wb, `Luong_giao_vien_${month}.xlsx`);
+  });
+
+  /* ===== Học phí ===== */
+  X.exportTuition = safe(async (rows, month, settings) => {
+    const wb = newBook();
+    const classes = [...new Map(rows.map((r) => [r.cls.id, r.cls])).values()];
+    addSheet(wb, {
+      name: 'Học phí ' + month, title: `BẢNG HỌC PHÍ ${U.monthLabel(month).toUpperCase()}`, info: [`Số học sinh: ${rows.length} · Đã đóng: ${rows.filter((r) => r.paid).length}`],
+      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, { h: 'Lớp', w: 12, align: 'center' }, { h: 'Số buổi có mặt', w: 11, align: 'center' }, { h: 'Số buổi vắng', w: 11, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : undefined) },
+        { h: 'Học phí', w: 15, fmt: MONEY }, { h: 'Giảm', w: 15, fmt: MONEY, color: (v) => (v > 0 ? 'FFC62828' : undefined) }, { h: 'Phải đóng', w: 16, fmt: MONEY, bold: true },
+        { h: 'Trạng thái', w: 12, align: 'center', color: (v) => (v === 'Đã đóng' ? 'FF0E7A3E' : 'FFB45309') }],
+      rows: rows.map((r, i) => [i + 1, r.student.code || '', r.student.name, r.cls.name, r.present, r.absent, r.base, r.deduct, r.total, r.paid ? 'Đã đóng' : 'Chưa đóng']),
+      total: ['', '', 'TỔNG CỘNG', '', rows.reduce((s, r) => s + r.present, 0), rows.reduce((s, r) => s + r.absent, 0), rows.reduce((s, r) => s + r.base, 0), rows.reduce((s, r) => s + r.deduct, 0), rows.reduce((s, r) => s + r.total, 0), ''],
+      notes: classes.map((c) => `${c.name}: ${U.feeRuleText(c, settings)}`), freezeCols: 3, signature: true,
+    });
+    await saveBook(wb, `Hoc_phi_${month}.xlsx`);
+  });
+
+  /* ===== Phiếu theo từng học sinh: bảng kết quả học tập (dạng dọc) & giấy chứng nhận ===== */
+  const usedNames = () => new Set();
+  const sheetName = (name, used) => {
+    const base = String(name).replace(/[\\/*?:[\]]/g, ' ').trim().slice(0, 27) || 'HS';
+    let n = base, i = 2;
+    while (used.has(n.toLowerCase())) n = base.slice(0, 24) + ' ' + i++;
+    used.add(n.toLowerCase());
+    return n;
+  };
+  const fillBg = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+  const scoreCol = (v) => (typeof v !== 'number' ? 'FF1B2B45' : v >= 8 ? 'FF0E7A3E' : v >= 6.5 ? 'FF1F6FEB' : v >= 5 ? 'FFB45309' : 'FFC62828');
+
+  /* card: { center, student, cls, teacherName, subtitle, tests:[{title,date,score,comment}], showComments, avg, att:{present,absent,total,rate}|null, tuition:{month,base,deduct,total,paid}|null, showCode, showTeacher } */
+  X.exportResultCards = safe(async (cards, filename) => {
+    const wb = newBook();
+    const used = usedNames();
+    cards.forEach((c) => {
+      const ws = wb.addWorksheet(sheetName(c.student.name, used), { pageSetup: pageSetup(false), views: [{ showGridLines: false }] });
+      const n = c.showComments ? 3 : 2;
+      [30, 12, c.showComments ? 34 : 3].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+      let r = 1;
+      const centered = (text, font, h) => {
+        for (let i = 1; i <= n; i++) ws.getCell(r, i).alignment = { horizontal: 'centerContinuous', vertical: 'middle' };
+        const cell = ws.getCell(r, 1); cell.value = text; cell.font = font;
+        if (h) ws.getRow(r).height = h;
+        r++;
+      };
+      const bar = (text) => {
+        for (let i = 1; i <= n; i++) { const cell = ws.getCell(r, i); cell.fill = fillBg(NAVY); cell.border = border; }
+        const cell = ws.getCell(r, 1); cell.value = text; cell.font = { name: FONT, bold: true, size: 9.5, color: { argb: 'FFFFFFFF' } };
+        cell.alignment = { vertical: 'middle' }; ws.getRow(r).height = 18; r++;
+      };
+      const pair = (label, value, o = {}) => {
+        const a = ws.getCell(r, 1), b = ws.getCell(r, 2);
+        a.value = label; a.font = { name: FONT, size: 10, bold: !!o.bold, color: { argb: 'FF1B2B45' } };
+        b.value = value === '' || value === undefined ? null : value;
+        b.font = { name: FONT, size: 10, bold: true, color: { argb: o.color || 'FF1B2B45' } };
+        b.alignment = { horizontal: o.left ? 'left' : 'center', vertical: 'middle' };
+        a.alignment = { vertical: 'middle', indent: 1 };
+        if (o.fmt) b.numFmt = o.fmt;
+        for (let i = 1; i <= n; i++) { const cell = ws.getCell(r, i); cell.border = border; if (o.fill) cell.fill = fillBg(o.fill); else if (o.zebra) cell.fill = fillBg(ZEBRA); }
+        ws.getRow(r).height = 17; r++;
+      };
+      const gap = () => { ws.getRow(r).height = 6; r++; };
+
+      centered(c.center.toUpperCase(), { name: FONT, bold: true, size: 10, color: { argb: BLUE } }, 15);
+      centered(c.title || 'BẢNG KẾT QUẢ HỌC TẬP', { name: FONT, bold: true, size: 14, color: { argb: NAVY } }, 24);
+      centered(c.subtitle, { name: FONT, size: 9, italic: true, color: { argb: GRAYTXT } }, 15);
+      gap();
+      pair('Họ tên học sinh', c.student.name, { bold: true, left: true, fill: TOTAL });
+      if (c.showCode && c.student.code) pair('Mã học sinh', c.student.code, { left: true });
+      pair('Lớp', `${c.cls.name} (${c.cls.code})`, { left: true });
+      if (c.showTeacher && c.teacherName) pair('Giáo viên', c.teacherName, { left: true });
+      gap();
+      if (c.tests.length || c.avg !== null && c.avg !== undefined && c.avg !== false) {
+        bar('KẾT QUẢ CÁC BÀI KIỂM TRA');
+        if (c.tests.length) {
+          const hr = ws.getRow(r); hr.height = 17;
+          ['Bài kiểm tra', 'Điểm', 'Nhận xét'].slice(0, n).forEach((t, i) => {
+            const cell = hr.getCell(i + 1); cell.value = t; cell.font = { name: FONT, bold: true, size: 9.5, color: { argb: NAVY } };
+            cell.fill = fillBg('FFDCE8FB'); cell.border = border; cell.alignment = { horizontal: i === 1 ? 'center' : 'left', vertical: 'middle', indent: i === 1 ? 0 : 1 };
+          });
+          r++;
+        }
+        c.tests.forEach((t, i) => {
+          const a = ws.getCell(r, 1), b = ws.getCell(r, 2);
+          a.value = `${t.title} (${U.shortDate(t.date)})`; a.font = { name: FONT, size: 10 }; a.alignment = { vertical: 'middle', indent: 1 };
+          b.value = typeof t.score === 'number' ? t.score : null; b.numFmt = '0.0#'; b.font = { name: FONT, size: 10.5, bold: true, color: { argb: scoreCol(t.score) } }; b.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (c.showComments) { const d = ws.getCell(r, 3); d.value = t.comment || null; d.font = { name: FONT, size: 9, italic: true, color: { argb: GRAYTXT } }; d.alignment = { vertical: 'middle', wrapText: true, indent: 1 }; }
+          for (let k = 1; k <= n; k++) { const cell = ws.getCell(r, k); cell.border = border; if (i % 2) cell.fill = fillBg(ZEBRA); }
+          ws.getRow(r).height = t.comment && t.comment.length > 42 ? 26 : 17; r++;
+        });
+        if (c.avg !== null && c.avg !== undefined && c.avg !== false) pair('Điểm trung bình', c.avg === '' ? null : c.avg, { bold: true, fill: TOTAL, fmt: '0.0#', color: scoreCol(c.avg) });
+        gap();
+      }
+      if (c.att) {
+        bar('CHUYÊN CẦN');
+        if (c.att.showPresent) pair('Số buổi đi học', c.att.present, { color: 'FF0E7A3E' });
+        if (c.att.showAbsent) pair('Số buổi vắng', c.att.absent, { color: c.att.absent > 0 ? 'FFC62828' : undefined, zebra: true });
+        if (c.att.showRate && c.att.rate !== '') pair('Tỷ lệ chuyên cần', c.att.rate / 100, { fmt: '0%' });
+        gap();
+      }
+      if (c.tuition) {
+        bar(`HỌC PHÍ ${U.monthLabel(c.tuition.month).toUpperCase()}`);
+        if (c.tuition.showBase) pair('Học phí của lớp', c.tuition.base, { fmt: MONEY });
+        if (c.tuition.showDeduct) pair('Giảm / trừ', c.tuition.deduct, { fmt: MONEY, zebra: true, color: c.tuition.deduct > 0 ? 'FFC62828' : undefined });
+        if (c.tuition.showTotal) pair('Số tiền phải đóng', c.tuition.total, { fmt: MONEY, bold: true, fill: TOTAL });
+        if (c.tuition.showPaid) pair('Trạng thái', c.tuition.paid ? 'Đã đóng' : 'Chưa đóng', { color: c.tuition.paid ? 'FF0E7A3E' : 'FFB45309' });
+        gap();
+      }
+      gap();
+      // chữ ký
+      const sig = (col, t1, t2) => { const a = ws.getCell(r, col), b = ws.getCell(r + 1, col); a.value = t1; a.font = { name: FONT, bold: true, size: 10, color: { argb: NAVY } }; a.alignment = { horizontal: 'center' }; b.value = t2; b.font = { name: FONT, italic: true, size: 8.5, color: { argb: GRAYTXT } }; b.alignment = { horizontal: 'center' }; };
+      sig(1, 'Giáo viên', '(ký, ghi rõ họ tên)'); sig(n, 'Phụ huynh', '(ký, ghi rõ họ tên)');
+      ws.getRow(r + 1).height = 15;
+      ws.headerFooter = { oddFooter: `&L&8${c.center}&R&8Ngày xuất ${U.fmtDate(U.today())}` };
+    });
+    await saveBook(wb, filename);
+  });
+
+  /* card: { center, student, courseName, classCode, from, to (chuỗi hiển thị hoặc ''), tests, avg, showScores, org, signerTitle, signerName, issueDate } */
+  X.exportCertificates = safe(async (cards, filename) => {
+    const wb = newBook();
+    const used = usedNames();
+    const SERIF = 'Times New Roman', GOLD = 'FFB8860B';
+    cards.forEach((c) => {
+      const ws = wb.addWorksheet(sheetName(c.student.name, used), { pageSetup: { ...pageSetup(false), fitToHeight: 1, margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 } }, views: [{ showGridLines: false }] });
+      const N = 6;
+      for (let i = 1; i <= N; i++) ws.getColumn(i).width = 15;
+      let r = 1;
+      const line = (text, font, h, align = 'centerContinuous') => {
+        for (let i = 1; i <= N; i++) ws.getCell(r, i).alignment = { horizontal: align, vertical: 'middle' };
+        const cell = ws.getCell(r, 1); cell.value = text; cell.font = font;
+        if (h) ws.getRow(r).height = h;
+        r++;
+      };
+      const blank = (h = 14) => { ws.getRow(r).height = h; r++; };
+      blank(10);
+      line(c.center.toUpperCase(), { name: SERIF, bold: true, size: 16, color: { argb: BLUE } }, 26);
+      line('✦  ✦  ✦', { name: FONT, size: 12, color: { argb: GOLD } }, 20);
+      blank(12);
+      line('GIẤY CHỨNG NHẬN', { name: SERIF, bold: true, size: 32, color: { argb: NAVY } }, 50);
+      line('HOÀN THÀNH KHÓA HỌC', { name: SERIF, bold: true, size: 20, color: { argb: BLUE } }, 34);
+      blank(18);
+      line('Chứng nhận học sinh', { name: SERIF, italic: true, size: 14, color: { argb: GRAYTXT } }, 24);
+      line(c.student.name.toUpperCase(), { name: SERIF, bold: true, size: 28, color: { argb: 'FFB3261E' } }, 44);
+      for (let i = 2; i <= 5; i++) { const cell = ws.getCell(r - 1, i); cell.border = { bottom: { style: 'thin', color: { argb: GOLD } } }; }
+      blank(14);
+      line(`Đã hoàn thành khóa học: ${c.courseName}${c.classCode ? ' (' + c.classCode + ')' : ''}`, { name: SERIF, size: 15, color: { argb: 'FF1B2B45' } }, 26);
+      const fromTxt = c.from || '…………………', toTxt = c.to || '…………………';
+      line(`Thời gian: từ ngày ${fromTxt}  đến ngày ${toTxt}`, { name: SERIF, size: 14, color: { argb: 'FF1B2B45' } }, 26);
+      blank(14);
+      if (c.showScores && c.tests.length) {
+        line('KẾT QUẢ CÁC BÀI KIỂM TRA', { name: SERIF, bold: true, size: 12, color: { argb: NAVY } }, 22);
+        c.tests.forEach((t) => {
+          const a = ws.getCell(r, 2), b = ws.getCell(r, 5);
+          a.value = `${t.title} (${U.shortDate(t.date)})`; a.font = { name: SERIF, size: 13 }; a.alignment = { vertical: 'middle' };
+          b.value = typeof t.score === 'number' ? t.score : null; b.numFmt = '0.0#'; b.font = { name: SERIF, bold: true, size: 14, color: { argb: scoreCol(t.score) } }; b.alignment = { horizontal: 'center', vertical: 'middle' };
+          for (let i = 2; i <= 5; i++) ws.getCell(r, i).border = { bottom: { style: 'hair', color: { argb: 'FF9AA7BD' } } };
+          ws.getRow(r).height = 22; r++;
+        });
+        if (c.avg !== '' && c.avg !== null && c.avg !== undefined) {
+          const a = ws.getCell(r, 2), b = ws.getCell(r, 5);
+          a.value = 'Điểm trung bình'; a.font = { name: SERIF, bold: true, size: 13, color: { argb: NAVY } };
+          b.value = c.avg; b.numFmt = '0.0#'; b.font = { name: SERIF, bold: true, size: 15, color: { argb: scoreCol(c.avg) } }; b.alignment = { horizontal: 'center' };
+          ws.getRow(r).height = 24; r++;
+        }
+        blank(14);
+      }
+      blank(10);
+      line(c.issueDate || 'Ngày ……… tháng ……… năm ………', { name: SERIF, italic: true, size: 13, color: { argb: 'FF1B2B45' } }, 24, 'right');
+      for (let i = 1; i <= N; i++) ws.getCell(r - 1, i).alignment = { horizontal: i === N ? 'right' : 'general', vertical: 'middle' };
+      ws.getCell(r - 1, 1).value = null; ws.getCell(r - 1, N).value = c.issueDate || 'Ngày ……… tháng ……… năm ………';
+      ws.getCell(r - 1, N).font = { name: SERIF, italic: true, size: 13, color: { argb: 'FF1B2B45' } };
+      ws.getCell(r - 1, N).alignment = { horizontal: 'right', vertical: 'middle' };
+      const sigLine = (text, font, h) => { const cell = ws.getCell(r, 5); cell.value = text; cell.font = font; cell.alignment = { horizontal: 'centerContinuous', vertical: 'middle' }; ws.getCell(r, 6).alignment = { horizontal: 'centerContinuous', vertical: 'middle' }; ws.getRow(r).height = h; r++; };
+      sigLine(c.org, { name: SERIF, bold: true, size: 14, color: { argb: NAVY } }, 24);
+      sigLine(c.signerTitle, { name: SERIF, bold: true, size: 14, color: { argb: NAVY } }, 24);
+      sigLine('(ký tên, đóng dấu)', { name: SERIF, italic: true, size: 10, color: { argb: GRAYTXT } }, 18);
+      blank(54);
+      sigLine(c.signerName || '', { name: SERIF, bold: true, size: 14, color: { argb: NAVY } }, 24);
+      blank(14);
+      // khung viền kép quanh giấy chứng nhận
+      const last = r - 1;
+      const dbl = { style: 'double', color: { argb: NAVY } };
+      for (let row = 1; row <= last; row++) {
+        for (let col = 1; col <= N; col++) {
+          const cell = ws.getCell(row, col);
+          const b = { ...(cell.border || {}) };
+          if (col === 1) b.left = dbl; if (col === N) b.right = dbl; if (row === 1) b.top = dbl; if (row === last) b.bottom = dbl;
+          cell.border = b;
+        }
+      }
+      ws.pageSetup.printArea = `A1:F${last}`;
+    });
+    await saveBook(wb, filename);
+  });
+
+  /* ===== Bảng tuỳ chọn cột (báo cáo học sinh) ===== */
+  X.exportTable = safe(async (spec, filename) => {
+    const wb = newBook();
+    addSheet(wb, spec);
+    await saveBook(wb, filename);
+  });
+
+  /* ===== Nhập điểm danh học sinh từ bảng ✓ / V ===== */
+  const PRESENT = ['✓', '✔', 'x', '1', 'c', 'co', 'có', 'p', 'có mặt', 'đi học'];
+  const ABSENT = ['v', 'vắng', 'vang', '0', 'a', 'k', 'không', 'khong', '-', '✗', '✘', 'nghỉ', 'nghi'];
+  const dateCols = (h) => h.map((x, i) => { const m = /(\d{1,2})\s*\/\s*(\d{1,2})/.exec(String(x)); return m ? { i, d: +m[1], m: +m[2] } : null; }).filter(Boolean);
+
+  X.parseAttendanceGrid = async (file, month) => {
+    const rows = rowsOf(await X.read(file));
+    const hi = headerIndex(rows, (h) => h.some((x) => x.includes('ho va ten')) && h.some((x) => /\d+\s*\/\s*\d+/.test(x)));
+    if (hi < 0) throw new Error('Không tìm thấy bảng điểm danh. Hãy dùng "Tải file mẫu / xuất Excel" của hệ thống rồi điền ✓ hoặc V.');
+    const h = rows[hi];
+    const iName = findCol(h, 'ho va ten', 'ho ten'), iCode = findCol(h, 'ma hs');
+    const year = Number(month.slice(0, 4));
+    const cols = dateCols(h).map((c) => ({ ...c, date: `${year}-${U.pad(c.m)}-${U.pad(c.d)}` }));
+    const skipped = cols.filter((c) => c.date.slice(0, 7) !== month).map((c) => c.date);
+    const use = cols.filter((c) => c.date.slice(0, 7) === month);
+    const out = [];
+    rows.slice(hi + 1).forEach((r, k) => {
+      const name = String(r[iName] || '').trim();
+      if (!name || /^ghi chu/.test(U.norm(name))) return;
+      const marks = {};
+      use.forEach((c) => {
+        const v = String(r[c.i] === undefined ? '' : r[c.i]).trim().toLowerCase();
+        if (!v) return;
+        if (PRESENT.includes(v)) marks[c.date] = true; else if (ABSENT.includes(v)) marks[c.date] = false;
+      });
+      out.push({ line: hi + k + 2, name, code: iCode >= 0 ? String(r[iCode] || '').trim() : '', marks });
+    });
+    return { rows: out, dates: use.map((c) => c.date), skipped };
+  };
+
+  /* ===== Nhập bảng điểm nhiều bài kiểm tra ===== */
+  X.parseScoreMatrix = async (file) => {
+    const rows = rowsOf(await X.read(file));
+    const hi = headerIndex(rows, (h) => h.some((x) => x.includes('ho va ten')) && h.some((x) => x.includes('diem tb') || x.includes('diem trung binh')));
+    if (hi < 0) throw new Error('Không đúng mẫu. Hãy dùng "Tải bảng tổng hợp" của hệ thống (có cột Điểm TB) làm mẫu.');
+    const h = rows[hi];
+    const iName = findCol(h, 'ho va ten', 'ho ten'), iCode = findCol(h, 'ma hs'), iAvg = findCol(h, 'diem tb', 'diem trung binh');
+    const tests = [];
+    h.forEach((x, i) => {
+      if (i === iName || i === iCode || i === iAvg || /^stt$/.test(U.norm(x))) return;
+      const parts = String(x).split(/\n/).map((t) => t.trim());
+      const m = /(\d{1,2})\s*\/\s*(\d{1,2})/.exec(parts[parts.length - 1] || '');
+      if (!m || parts.length < 2) return;
+      tests.push({ i, title: parts.slice(0, -1).join(' '), d: +m[1], m: +m[2] });
+    });
+    if (!tests.length) throw new Error('Không thấy cột bài kiểm tra nào (tiêu đề cột cần có dạng "Tên bài", xuống dòng, "ngày/tháng").');
+    const students = [];
+    rows.slice(hi + 1).forEach((r) => {
+      const name = String(r[iName] || '').trim();
+      if (!name || /^(trung binh|ghi chu)/.test(U.norm(name))) return;
+      students.push({ name, code: iCode >= 0 ? String(r[iCode] || '').trim() : '', scores: tests.map((t) => String(r[t.i] === undefined ? '' : r[t.i]).trim().replace(',', '.')) });
+    });
+    return { tests, students };
+  };
+
+  /* ===== Nhập trạng thái đóng học phí ===== */
+  X.parseTuition = async (file) => {
+    const rows = rowsOf(await X.read(file));
+    const hi = headerIndex(rows, (h) => h.some((x) => x.includes('trang thai')) && h.some((x) => x.includes('ho va ten')));
+    if (hi < 0) throw new Error('Không đúng mẫu. Hãy dùng file "Xuất Excel" của màn hình Học phí, điền cột Trạng thái là "Đã đóng" hoặc "Chưa đóng".');
+    const h = rows[hi];
+    const iName = findCol(h, 'ho va ten'), iCode = findCol(h, 'ma hs'), iSt = findCol(h, 'trang thai');
+    return rows.slice(hi + 1).map((r) => ({
+      name: String(r[iName] || '').trim(), code: iCode >= 0 ? String(r[iCode] || '').trim() : '',
+      paid: /^(da (dong|thu|nop)|dong|paid|x)$/.test(U.norm(r[iSt])),
+      unpaid: /^chua/.test(U.norm(r[iSt])),
+    })).filter((r) => r.name && (r.paid || r.unpaid));
+  };
+
+  /* ===== Chấm công giáo viên theo ngày (số tiết mỗi buổi) ===== */
+  X.exportTeacherGrid = safe(async (entries, month, dates) => {
+    const wb = newBook();
+    const rows = entries.map((e) => {
+      let total = 0;
+      const cells = dates.map((d) => {
+        const r = e.byDate[d];
+        if (!r) return '';
+        if (r.present) { total += Number(r.periods) || 0; return Number(r.periods) || 0; }
+        return 'V';
+      });
+      return [e.cls.code, e.cls.name, e.name, U.roleName(e.role), ...cells, total];
+    });
+    addSheet(wb, {
+      name: 'Chấm công GV', title: `BẢNG CHẤM CÔNG GIÁO VIÊN ${U.monthLabel(month).toUpperCase()}`,
+      info: ['Mỗi ô là số tiết giáo viên đã dạy trong buổi đó (ô trống = chưa điểm danh, V = nghỉ không dạy).'],
+      cols: [{ h: 'Mã lớp', w: 14, align: 'center' }, { h: 'Lớp', w: 12 }, { h: 'Giáo viên', w: 26, bold: true }, { h: 'Vai trò', w: 16 },
+        ...dates.map((d) => ({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 8, align: 'center', color: (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E'), bold: true })),
+        { h: 'Tổng tiết', w: 11, align: 'center', bold: true }],
+      rows, freezeCols: 3, notes: ['File này dùng được làm mẫu để nhập lại chấm công: điền số tiết đã dạy vào ô của buổi học (ví dụ 2), hoặc V nếu nghỉ.'],
+    });
+    await saveBook(wb, `Cham_cong_giao_vien_${month}.xlsx`);
+  });
+
+  X.parseTeacherGrid = async (file, month) => {
+    const rows = rowsOf(await X.read(file));
+    const hi = headerIndex(rows, (h) => h.some((x) => x.includes('ma lop')) && h.some((x) => x.includes('giao vien')));
+    if (hi < 0) throw new Error('Không đúng mẫu. Hãy dùng "Tải mẫu chấm công" của hệ thống.');
+    const h = rows[hi];
+    const iCls = findCol(h, 'ma lop'), iT = findCol(h, 'giao vien');
+    const year = Number(month.slice(0, 4));
+    const cols = dateCols(h).map((c) => ({ ...c, date: `${year}-${U.pad(c.m)}-${U.pad(c.d)}` })).filter((c) => c.date.slice(0, 7) === month);
+    return rows.slice(hi + 1).map((r, k) => {
+      const cells = {};
+      cols.forEach((c) => {
+        const v = String(r[c.i] === undefined ? '' : r[c.i]).trim().toLowerCase().replace(',', '.');
+        if (!v) return;
+        if (v === 'v' || v === 'nghỉ' || v === 'nghi') cells[c.date] = 'V'; else if (!isNaN(Number(v))) cells[c.date] = Number(v);
+      });
+      return { line: hi + k + 2, classCode: String(r[iCls] || '').trim(), teacher: String(r[iT] || '').trim(), cells };
+    }).filter((r) => r.classCode && r.teacher);
+  };
+})();

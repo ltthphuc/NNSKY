@@ -14,7 +14,8 @@
  *   }
  */
 window.SKY_CONFIG = {
-  firebase: {
+  // Thêm ?demo=1 vào địa chỉ web để mở thử chế độ dùng thử (dữ liệu mẫu trên trình duyệt, không đụng Firebase)
+  firebase: /[?&]demo=1/.test(location.search) ? null : {
     apiKey: 'AIzaSyCrjx2Ipt9AA5JAm0XPxuKurCH-onZ-s4o',
     authDomain: 'nnsky-336ff.firebaseapp.com',
     projectId: 'nnsky-336ff',

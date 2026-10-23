@@ -38,7 +38,7 @@
       tMarks = {};
       teacherIds().forEach((id) => {
         const r = td && td.records && td.records[id];
-        tMarks[id] = r ? { present: !!r.present, periods: Number(r.periods) || 0 } : { present: true, periods: Number(cls.periods) || 2 };
+        tMarks[id] = r ? { present: !!r.present, periods: Number(r.periods) || 0 } : { present: true, periods: Number(U.slotFor(cls, sel).periods) || Number(cls.periods) || 2 };
       });
       dirty = false;
       savedAt = doc ? `Đã lưu${doc.updatedBy ? ' bởi ' + doc.updatedBy : ''}` : 'Chưa điểm danh buổi này';
@@ -89,7 +89,7 @@
             <span class="small muted">Số tiết</span><input class="input" type="number" min="0" max="10" step="0.5" style="width:78px;text-align:center" data-tp="${id}" value="${m.periods}" ${m.present ? '' : 'disabled'}></div>`; }).join('')}</div></div>` : ''}
         ${sel ? `<div class="card">
           <div class="card-h">
-            <div><h3>${U.dayName(U.parse(sel).getDay())}, ${U.fmtDate(sel)} · ${esc(cls.start)} - ${esc(cls.end)}</h3><div class="small muted" id="saved">${esc(savedAt)}</div></div>
+            <div><h3>${U.dayName(U.parse(sel).getDay())}, ${U.fmtDate(sel)} · ${esc(U.timeText(U.slotFor(cls, sel)))}</h3><div class="small muted" id="saved">${esc(savedAt)}</div></div>
             <div class="grow"></div>
             <div class="att-summary"><span class="badge ok" id="cp">Có mặt: ${p}</span><span class="badge err" id="ca">Vắng: ${a}</span><span class="badge" id="ct">Tổng: ${students.length}</span><span class="badge warn ${dirty ? '' : 'hidden'}" id="dirty">Chưa lưu</span></div>
           </div>
@@ -761,7 +761,7 @@
           ${App.classes.map((c) => `<tr><td class="name">${esc(c.name)}<div class="small muted">${esc(c.code)}${c.status === 'closed' ? ' · đã đóng' : ''}</div></td><td class="nowrap small">${esc(U.scheduleText(c))}</td>
             <td><select class="select" data-main="${c.id}">${opts(c.teacherId)}</select></td>
             <td><select class="select" data-ta="${c.id}">${opts(c.assistantId)}</select></td>
-            <td><input class="input" type="number" min="0.5" max="10" step="0.5" style="width:84px" data-per="${c.id}" value="${esc(c.periods || 2)}"></td></tr>`).join('')}
+            <td class="small">${esc(U.periodsText(c))} tiết<div class="muted">sửa trong form lớp</div></td></tr>`).join('')}
         </tbody></table>` : empty('classes', 'Chưa có lớp nào', `<a class="btn mt" href="#/classes?new=1">${icon('plus')} Thêm lớp mới</a>`)}</div></div>
         <div class="card mt"><div class="card-h"><h3>2. Số tiền mỗi tiết giáo viên được hưởng</h3><span class="small muted">Tiền lương = số tiết đã dạy × đơn giá (xem ở mục Công & lương GV)</span></div>
         <div class="table-wrap">${teachers.length ? `<table class="t"><thead><tr><th>Giáo viên</th><th>Lớp phụ trách</th><th>Đơn giá/tiết khi là giáo viên chính (đ)</th><th>Đơn giá/tiết khi là trợ giảng (đ)</th></tr></thead><tbody>

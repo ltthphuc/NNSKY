@@ -44,7 +44,7 @@ window.Views = window.Views || {};
       ? todays.map((c) => {
           const doc = attendance.find((a) => a.classId === c.id && a.date === today);
           const abs = doc ? Object.values(doc.records || {}).filter((v) => v === false).length : 0;
-          return `<div class="list-item"><div class="time">${esc(c.start)} - ${esc(c.end)}</div>
+          return `<div class="list-item"><div class="time">${esc(U.timeText(U.slotFor(c, today)))}</div>
             <div class="grow"><b>${esc(c.name)}</b> <span class="muted">· ${esc(c.code)}</span><div class="small muted">${esc(App.teacherName(c.teacherId))}</div></div>
             ${doc ? `<span class="badge ok">${icon('check', 14)} Đã điểm danh${abs ? ' · ' + abs + ' vắng' : ''}</span>` : '<span class="badge warn">Chưa điểm danh</span>'}
             <a class="btn sm ${doc ? 'ghost' : ''}" href="#/attendance?class=${c.id}&date=${today}">${doc ? 'Xem' : 'Điểm danh'}</a></div>`;
@@ -87,7 +87,7 @@ window.Views = window.Views || {};
         <td class="nowrap">${esc(U.scheduleText(c))}</td>
         <td>${esc(termName(c.term))}<div class="small muted">${esc(c.schoolYear || '')}</div></td>
         <td>${esc(App.teacherName(c.teacherId))}${c.assistantId ? `<div class="small muted">TG: ${esc(App.teacherName(c.assistantId))}</div>` : ''}</td>
-        <td class="center">${esc(c.periods || '')}</td>
+        <td class="center">${esc(U.periodsText(c))}</td>
         <td class="right mono">${money(c.fee)}<div class="small muted">${c.feeMode === 'attend' ? 'Theo buổi học' : 'Theo buổi nghỉ'}</div></td>
         <td class="center"><b>${n}</b></td>
         <td>${c.status === 'closed' ? '<span class="badge">Đã đóng</span>' : '<span class="badge ok">Đang mở</span>'}</td>
@@ -156,7 +156,10 @@ window.Views = window.Views || {};
       const gm = /[1-5]/.exec(init.name); if (gm) d.grade = Number(gm[0]);
     }
     const teachers = App.teachers.filter((t) => t.active !== false || t.id === d.teacherId || t.id === d.assistantId);
-    let dateTouched = !isNew, periodsTouched = !isNew;
+    let dateTouched = !isNew;
+    const slotState = {};
+    U.slots(d).forEach((s) => { slotState[s.day] = { start: s.start, end: s.end, periods: s.periods, touched: Number(s.periods) !== U.suggestPeriods(s.start, s.end, App.settings.periodMinutes) }; });
+    const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
     const tOpts = (sel) => `<option value="">-- Không có --</option>${teachers.map((t) => `<option value="${t.id}" ${sel === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}`;
     const m = U.modal({
       title: isNew ? `Thông tin lớp ${d.name}` : `Sửa lớp ${d.name}`, okText: isNew ? 'Lưu lớp' : 'Lưu thay đổi', wide: true,
@@ -168,11 +171,10 @@ window.Views = window.Views || {};
         <div><label class="f">Học kỳ</label><select class="select" id="term">${['HK1', 'HK2', 'NH'].map((t) => `<option value="${t}" ${d.term === t ? 'selected' : ''}>${termName(t)}</option>`).join('')}</select></div>
         <div><label class="f">Giáo viên chính</label><select class="select" id="teacher">${tOpts(d.teacherId)}</select></div>
         <div><label class="f">Trợ giảng (không bắt buộc)</label><select class="select" id="assistant">${tOpts(d.assistantId)}</select></div>
-        <div><label class="f">Số tiết mỗi buổi *</label><input class="input" type="number" min="0.5" max="10" step="0.5" id="periods" value="${esc(d.periods)}"><div class="hint">Tự gợi ý theo giờ học (1 tiết = ${esc(App.settings.periodMinutes)} phút), dùng để tính tiền giáo viên.</div></div>
-        <div class="full"><label class="f">Lịch học hằng tuần *</label>
-          <div class="day-pick">${[1, 2, 3, 4, 5, 6, 0].map((n) => `<label><input type="checkbox" name="day" value="${n}" ${d.days.includes(n) ? 'checked' : ''}><span>${U.dayName(n)}</span></label>`).join('')}</div></div>
-        <div><label class="f">Giờ bắt đầu</label><input class="input" type="time" id="start" value="${esc(d.start)}"></div>
-        <div><label class="f">Giờ kết thúc</label><input class="input" type="time" id="end" value="${esc(d.end)}"></div>
+        <div class="full"><label class="f">Lịch học hằng tuần * (mỗi ngày chọn giờ riêng)</label>
+          <div class="day-pick">${DAY_ORDER.map((n) => `<label><input type="checkbox" name="day" value="${n}" ${slotState[n] ? 'checked' : ''}><span>${U.dayName(n)}</span></label>`).join('')}</div>
+          <div id="slots" class="slots"></div>
+          <div class="hint">Mỗi ngày học có giờ bắt đầu, giờ kết thúc và số tiết riêng. Số tiết tự gợi ý theo giờ (1 tiết = ${esc(App.settings.periodMinutes)} phút) và dùng để tính tiền giáo viên.</div></div>
         <div><label class="f">Ngày khai giảng</label><input class="input" type="date" id="sd" value="${esc(d.startDate || '')}"></div>
         <div><label class="f">Ngày kết thúc</label><input class="input" type="date" id="ed" value="${esc(d.endDate || '')}"></div>
         <div><label class="f">Học phí mỗi tháng (đ) *</label><input class="input" type="number" min="0" step="1000" id="fee" value="${esc(d.fee)}"><div class="hint">Học phí này dùng để tự tính tiền cuối tháng cho lớp.</div></div>
@@ -182,22 +184,25 @@ window.Views = window.Views || {};
       </div>`,
       onOk: async (w) => {
         const v = (id) => w.querySelector('#' + id).value.trim();
-        const days = [...w.querySelectorAll('[name=day]:checked')].map((x) => Number(x.value));
+        const slots = DAY_ORDER.filter((n) => w.querySelector(`[name=day][value="${n}"]`).checked).map((n) => ({ day: n, start: slotState[n].start, end: slotState[n].end, periods: Number(slotState[n].periods) }));
+        const days = slots.map((s) => s.day);
         const code = d.code;
         if (!v('name')) throw new Error('Vui lòng nhập tên lớp.');
         if (App.classes.some((k) => k.id !== (c && c.id) && k.code.toLowerCase() === code.toLowerCase())) throw new Error('Mã lớp bị trùng, vui lòng đóng cửa sổ và tạo lại.');
         if (!days.length) throw new Error('Chọn ít nhất một ngày học trong tuần.');
-        if (!v('start') || !v('end') || v('start') >= v('end')) throw new Error('Giờ học không hợp lệ (giờ kết thúc phải sau giờ bắt đầu).');
+        for (const s of slots) {
+          if (!s.start || !s.end || s.start >= s.end) throw new Error(`Giờ học ${U.dayName(s.day)} không hợp lệ (giờ kết thúc phải sau giờ bắt đầu).`);
+          if (!(s.periods > 0)) throw new Error(`Số tiết ${U.dayName(s.day)} không hợp lệ.`);
+        }
         if (v('sd') && v('ed') && v('sd') > v('ed')) throw new Error('Ngày kết thúc phải sau ngày khai giảng.');
         if (v('fee') === '' || Number(v('fee')) < 0) throw new Error('Học phí không hợp lệ.');
         const data = {
-          code, name: v('name'), grade: Number(v('grade')), term: v('term'), schoolYear: v('year'), days, start: v('start'), end: v('end'),
+          code, name: v('name'), grade: Number(v('grade')), term: v('term'), schoolYear: v('year'), days, slots, start: slots[0].start, end: slots[0].end,
           startDate: v('sd'), endDate: v('ed'), fee: Number(v('fee')), teacherId: v('teacher'), assistantId: v('assistant'), status: v('status'),
-          periods: Number(v('periods')), feeMode: v('feemode'), sessionRate: Math.max(0, Number(v('rate')) || 0),
+          periods: slots[0].periods, feeMode: v('feemode'), sessionRate: Math.max(0, Number(v('rate')) || 0),
         };
         if (data.feeMode === 'attend' && !(data.sessionRate > 0)) throw new Error('Nhập đơn giá mỗi buổi học (lớn hơn 0).');
         if (data.teacherId && data.teacherId === data.assistantId) throw new Error('Giáo viên chính và trợ giảng phải là hai người khác nhau.');
-        if (!(data.periods > 0)) throw new Error('Số tiết mỗi buổi không hợp lệ.');
         data.teacherIds = U.classTeachers(data);
         const id = await DB.save('classes', c && c.id, data);
         if (c && U.classTeachers(c).join() !== data.teacherIds.join()) {
@@ -218,10 +223,42 @@ window.Views = window.Views || {};
     };
     const showRate = () => { w.querySelector('#rate-box').classList.toggle('hidden', w.querySelector('#feemode').value !== 'attend'); };
     w.querySelector('#feemode').onchange = showRate; showRate();
-    const updPeriods = () => { if (!periodsTouched) w.querySelector('#periods').value = U.suggestPeriods(w.querySelector('#start').value, w.querySelector('#end').value, App.settings.periodMinutes); };
-    w.querySelector('#periods').oninput = () => { periodsTouched = true; };
-    w.querySelector('#start').onchange = w.querySelector('#end').onchange = updPeriods;
-    if (isNew) updPeriods();
+    /* khung giờ riêng cho từng ngày học */
+    const slotsBox = w.querySelector('#slots');
+    const renderSlots = () => {
+      const checked = DAY_ORDER.filter((n) => w.querySelector(`[name=day][value="${n}"]`).checked);
+      DAY_ORDER.forEach((n) => { if (!checked.includes(n)) delete slotState[n]; });
+      let last = null;
+      checked.forEach((n) => {
+        if (!slotState[n]) {
+          const src = last || { start: '17:30', end: '19:00' };
+          slotState[n] = { start: src.start, end: src.end, periods: U.suggestPeriods(src.start, src.end, App.settings.periodMinutes), touched: false };
+        }
+        last = slotState[n];
+      });
+      slotsBox.innerHTML = checked.length
+        ? checked.map((n) => `<div class="slot-row" data-day="${n}"><b>${U.dayName(n)}</b>
+            <input class="input" type="time" data-f="start" value="${esc(slotState[n].start || '')}"><span class="muted">đến</span>
+            <input class="input" type="time" data-f="end" value="${esc(slotState[n].end || '')}">
+            <label class="small muted">Số tiết</label><input class="input" type="number" min="0.5" max="10" step="0.5" data-f="periods" value="${esc(slotState[n].periods)}"></div>`).join('')
+          + (checked.length > 1 ? '<button type="button" class="btn sm ghost" id="copyslot">Dùng giờ của ngày đầu cho tất cả các ngày</button>' : '')
+        : '<div class="muted small">Chọn các ngày học trong tuần ở trên.</div>';
+    };
+    w.querySelectorAll('[name=day]').forEach((x) => { x.onchange = renderSlots; });
+    slotsBox.oninput = (e) => {
+      const row = e.target.closest('.slot-row'); if (!row) return;
+      const st = slotState[row.dataset.day], f = e.target.dataset.f;
+      st[f] = e.target.value;
+      if (f === 'periods') st.touched = true;
+      else if (!st.touched) { st.periods = U.suggestPeriods(st.start, st.end, App.settings.periodMinutes); row.querySelector('[data-f=periods]').value = st.periods; }
+    };
+    slotsBox.onclick = (e) => {
+      if (!e.target.closest('#copyslot')) return;
+      const first = slotsBox.querySelector('.slot-row'); const s0 = slotState[first.dataset.day];
+      slotsBox.querySelectorAll('.slot-row').forEach((r) => { Object.assign(slotState[r.dataset.day], { start: s0.start, end: s0.end, periods: s0.periods, touched: s0.touched }); });
+      renderSlots();
+    };
+    renderSlots();
     w.querySelector('#sd').oninput = w.querySelector('#ed').oninput = () => { dateTouched = true; };
     ['grade', 'term', 'year'].forEach((id) => { w.querySelector('#' + id).onchange = upd; });
     if (isNew) upd();

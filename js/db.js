@@ -29,7 +29,7 @@
    *  CHẾ ĐỘ DÙNG THỬ (localStorage)
    * ===================================================================== */
   const Demo = (() => {
-    const KEY = 'sky_demo_v4', SKEY = 'sky_demo_session_v4';
+    const KEY = 'sky_demo_v5', SKEY = 'sky_demo_session_v5';
     let store = null, listener = null;
 
     function seed() {
@@ -65,7 +65,8 @@
         const id = 'c_' + g;
         const code = ['SKY-4HQ7M', 'SKY-9TR2X', 'SKY-6WD3B', 'SKY-2NF8K', 'SKY-7PC5Z'][g - 1];
         const tids = [t, ta].filter(Boolean);
-        s.classes[id] = { code, name: `Lớp ${g}`, grade: g, term, schoolYear: `${sy}-${sy + 1}`, days, start: st, end: en, startDate, endDate, fee: 400000, teacherId: t, assistantId: ta, teacherIds: tids, periods: 2, feeMode: g === 2 ? 'attend' : 'absence', sessionRate: 50000, status: 'open' };
+        const slots = days.map((dd, i) => (g === 3 ? { day: dd, start: i ? '14:00' : '08:00', end: i ? '15:30' : '09:30', periods: 2 } : { day: dd, start: st, end: en, periods: 2 }));
+        s.classes[id] = { code, name: `Lớp ${g}`, grade: g, term, schoolYear: `${sy}-${sy + 1}`, days, slots, start: slots[0].start, end: slots[0].end, startDate, endDate, fee: 400000, teacherId: t, assistantId: ta, teacherIds: tids, periods: 2, feeMode: g === 2 ? 'attend' : 'absence', sessionRate: 50000, status: 'open' };
         const n = 7 + (g % 3);
         const used = new Set();
         for (let i = 1; i <= n; i++) {

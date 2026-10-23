@@ -408,3 +408,15 @@ table.t { width: 100%; border-collapse: collapse; }
   table.t.stack td.empty-cell { display: none; }
   table.t.stack td[data-l="Mã HS"] { padding-right: 36px; }
 }
+
+/* ===== Lịch học: mỗi ngày một khung giờ ===== */
+.slots { display: grid; gap: 8px; margin-top: 10px; }
+.slot-row { display: grid; grid-template-columns: 64px 1fr auto 1fr auto 84px; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: #fafcff; }
+.slot-row b { color: var(--primary); }
+.slot-row .input { padding: 7px 10px; }
+@media (max-width: 700px) {
+  .slot-row { grid-template-columns: 1fr 1fr; }
+  .slot-row b { grid-column: 1 / -1; }
+  .slot-row .muted:not(label) { display: none; }
+  .slot-row label { grid-column: 1; }
+}

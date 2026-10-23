@@ -34,10 +34,18 @@
     }
     return out;
   };
+  /* Lịch học: mỗi ngày trong tuần có giờ riêng (slots). Lớp cũ chỉ có days + start/end thì tự quy đổi. */
+  U.slots = (cls) =>
+    (Array.isArray(cls.slots) && cls.slots.length ? cls.slots : (cls.days || []).map((d) => ({ day: d, start: cls.start, end: cls.end, periods: cls.periods })))
+      .slice().sort((a, b) => (a.day || 7) - (b.day || 7));
+  U.slotFor = (cls, date) => U.slots(cls).find((s) => s.day === U.parse(date).getDay()) || { day: U.parse(date).getDay(), start: cls.start, end: cls.end, periods: cls.periods };
+  U.timeText = (s) => `${s.start || ''} - ${s.end || ''}`;
   U.scheduleText = (cls) => {
-    const ds = (cls.days || []).slice().sort((a, b) => (a || 7) - (b || 7)).map(U.dayName).join(', ');
-    return `${ds} · ${cls.start || ''} - ${cls.end || ''}`;
+    const sl = U.slots(cls);
+    if (sl.length && sl.every((s) => s.start === sl[0].start && s.end === sl[0].end)) return `${sl.map((s) => U.dayName(s.day)).join(', ')} · ${U.timeText(sl[0])}`;
+    return sl.map((s) => `${U.dayName(s.day)} ${U.timeText(s)}`).join(' · ');
   };
+  U.periodsText = (cls) => [...new Set(U.slots(cls).map((s) => s.periods).filter((p) => p !== undefined && p !== null && p !== ''))].join(' / ');
 
   /* Sắp xếp tên người Việt theo tên gọi (từ cuối) */
   U.sortVN = (arr, key = (x) => x.name) =>

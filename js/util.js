@@ -140,6 +140,7 @@
       const docs = attendance.filter((a) => a.classId === cls.id && String(a.date).slice(0, 7) === month);
       const recorded = new Set(docs.map((d) => d.date));
       const missing = scheduled.filter((d) => d <= today && !recorded.has(d)).length;
+      if (!scheduled.length && !docs.length) continue; // lớp chưa mở / đã kết thúc trong tháng này
       for (const st of students.filter((s) => s.classId === cls.id)) {
         const sd = st.startDate || '';
         if (sd && sd > to) continue; // chưa bắt đầu học trong tháng này

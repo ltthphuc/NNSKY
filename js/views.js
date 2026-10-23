@@ -176,7 +176,7 @@ window.Views = window.Views || {};
           <div class="day-pick">${DAY_ORDER.map((n) => `<label><input type="checkbox" name="day" value="${n}" ${slotState[n] ? 'checked' : ''}><span>${U.dayName(n)}</span></label>`).join('')}</div>
           <div id="slots" class="slots"></div>
           <div class="hint">Mỗi ngày học có giờ bắt đầu, giờ kết thúc và số tiết riêng. Số tiết tự gợi ý theo giờ (1 tiết = ${esc(App.settings.periodMinutes)} phút) và dùng để tính tiền giáo viên.</div></div>
-        <div><label class="f">Ngày khai giảng</label><input class="input" type="date" id="sd" value="${esc(d.startDate || '')}"></div>
+        <div><label class="f">Ngày khai giảng (ngày mở lớp) *</label><input class="input" type="date" id="sd" value="${esc(d.startDate || '')}"></div>
         <div><label class="f">Ngày kết thúc</label><input class="input" type="date" id="ed" value="${esc(d.endDate || '')}"></div>
         <div><label class="f">Học phí mỗi tháng (đ) *</label><input class="input" type="number" min="0" step="1000" id="fee" value="${esc(d.fee)}"><div class="hint">Học phí này dùng để tự tính tiền cuối tháng cho lớp.</div></div>
         <div><label class="f">Cách tính học phí học sinh</label><select class="select" id="feemode"><option value="absence" ${d.feeMode !== 'attend' ? 'selected' : ''}>Theo số buổi nghỉ (trừ tiền khi vắng)</option><option value="attend" ${d.feeMode === 'attend' ? 'selected' : ''}>Theo số buổi đã đi học</option></select></div>
@@ -189,6 +189,7 @@ window.Views = window.Views || {};
         const days = slots.map((s) => s.day);
         const code = d.code;
         if (!v('name')) throw new Error('Vui lòng nhập tên lớp.');
+        if (!v('sd')) throw new Error('Vui lòng nhập ngày khai giảng (ngày mở lớp). Các buổi học chỉ được tạo từ ngày này.');
         if (App.classes.some((k) => k.id !== (c && c.id) && k.code.toLowerCase() === code.toLowerCase())) throw new Error('Mã lớp bị trùng, vui lòng đóng cửa sổ và tạo lại.');
         if (!days.length) throw new Error('Chọn ít nhất một ngày học trong tuần.');
         for (const s of slots) {

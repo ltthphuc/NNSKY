@@ -111,8 +111,10 @@
   /* Hai cách tính học phí (chọn theo từng lớp):
    *  - 'absence': học phí lớp trừ tiền theo số buổi nghỉ (nghỉ từ N buổi mới trừ)
    *  - 'attend' : tính theo số buổi đã đi học × đơn giá buổi, tối đa bằng học phí tháng của lớp (mức trần) */
-  U.calcFee = (cls, settings, present, absent) => {
-    const base = Number(cls.fee) || 0;
+  U.calcFee = (cls, settings, present, absent, ratio = 1) => {
+    // ratio < 1: học sinh vào học giữa tháng, học phí cố định chỉ tính theo số buổi có theo học
+    const fee = Number(cls.fee) || 0;
+    const base = cls.feeMode !== 'attend' && ratio < 1 ? Math.round((fee * ratio) / 1000) * 1000 : fee;
     if (cls.feeMode === 'attend') {
       const charge = Math.min(base, present * (Number(cls.sessionRate) || 0));
       return { base, deduct: base - charge, total: charge };
@@ -137,14 +139,19 @@
       const recorded = new Set(docs.map((d) => d.date));
       const missing = scheduled.filter((d) => d <= today && !recorded.has(d)).length;
       for (const st of students.filter((s) => s.classId === cls.id)) {
-        const has = docs.some((d) => d.records && st.id in d.records);
+        const sd = st.startDate || '';
+        if (sd && sd > to) continue; // chưa bắt đầu học trong tháng này
+        const mine = sd ? scheduled.filter((d) => d >= sd) : scheduled; // các buổi học sinh có theo học
+        const ratio = scheduled.length ? mine.length / scheduled.length : 1;
+        const myDocs = sd ? docs.filter((d) => d.date >= sd) : docs;
+        const has = myDocs.some((d) => d.records && st.id in d.records);
         if (st.status === 'inactive' && !has) continue;
         let present = 0, absent = 0;
-        docs.forEach((d) => { const v = d.records && d.records[st.id]; if (v === true) present++; else if (v === false) absent++; });
-        const { base, deduct, total: calc } = U.calcFee(cls, settings, present, absent);
+        myDocs.forEach((d) => { const v = d.records && d.records[st.id]; if (v === true) present++; else if (v === false) absent++; });
+        const { base, deduct, total: calc } = U.calcFee(cls, settings, present, absent, ratio);
         const pay = payments.find((p) => p.id === `${st.id}_${month}`);
         rows.push({
-          student: st, cls, scheduled: scheduled.length, recorded: docs.length, missing, present, absent,
+          student: st, cls, scheduled: mine.length, classScheduled: scheduled.length, ratio, recorded: docs.length, missing, present, absent,
           base: pay ? pay.base : base, deduct: pay ? pay.deduct : deduct, total: pay ? pay.amount : calc, calc,
           paid: !!(pay && pay.paid), pay,
         });

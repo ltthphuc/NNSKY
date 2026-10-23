@@ -195,50 +195,73 @@
   X.studentTemplate = safe(async (classes) => {
     const wb = newBook();
     const c = classes[0];
-    const code = c ? c.code : 'SKY-AB123';
-    const { ws, headerRow, firstRow } = addSheet(wb, {
-      name: 'Danh sách học sinh', title: 'DANH SÁCH HỌC SINH', landscape: false,
-      info: ['Điền mỗi học sinh một dòng, bắt đầu từ dòng đầu tiên dưới tiêu đề (các dòng "(mẫu)" sẽ tự bị bỏ qua).', 'Cột có dấu * là bắt buộc. Xem thêm trang "Hướng dẫn".'],
-      cols: [{ h: 'Họ và tên *', w: 28 }, { h: 'Mã lớp', w: 18, align: 'center' }, { h: 'Số điện thoại', w: 18, align: 'center' }, { h: 'CCCD', w: 20, align: 'center' }, { h: 'Ghi chú', w: 34 }],
-      rows: [['Nguyễn Văn An (mẫu)', code, '0912345678', '', 'Phụ huynh: Nguyễn Văn B'], ['Trần Thị Bình (mẫu)', code, '0987654321', '079318000123', '']],
+    const single = classes.length === 1;
+    const cname = c ? c.name : 'Lớp 1', code = c ? c.code : 'SKY-AB123';
+    const { ws, firstRow } = addSheet(wb, {
+      name: 'Danh sách học sinh', title: single ? `DANH SÁCH HỌC SINH ${c.name.toUpperCase()}` : 'DANH SÁCH HỌC SINH', landscape: true,
+      info: ['Điền mỗi học sinh một dòng (các dòng "(mẫu)" sẽ tự bị bỏ qua). Cột có dấu * là bắt buộc.',
+        'Ngày bắt đầu học: ngày học sinh vào lớp, viết dạng dd/mm/yyyy. Để trống = học từ đầu khóa. Điểm danh và học phí chỉ tính từ ngày này.'],
+      cols: [{ h: 'Họ tên học sinh *', w: 28 }, { h: 'Tên lớp', w: 14 }, { h: 'Mã lớp', w: 16, align: 'center' }, { h: 'Số điện thoại', w: 16, align: 'center' },
+        { h: 'CCCD', w: 18, align: 'center' }, { h: 'Ngày bắt đầu học', w: 17, align: 'center' }, { h: 'Ghi chú', w: 30 }],
+      rows: [['Nguyễn Văn An (mẫu)', cname, code, '0912345678', '', '', 'Phụ huynh: Nguyễn Văn B'], ['Trần Thị Bình (mẫu)', cname, code, '0987654321', '079318000123', '15/10/2026', 'Vào học muộn']],
       sample: new Set([0, 1]),
     });
     const guide = addGuide(wb, 'HƯỚNG DẪN NHẬP DANH SÁCH HỌC SINH', [
       '1. Điền thông tin học sinh ở sheet "Danh sách học sinh", mỗi học sinh một dòng. Hai dòng "(mẫu)" sẽ tự bị bỏ qua khi nhập.',
-      '2. "Họ và tên" là bắt buộc. Số điện thoại và CCCD không bắt buộc (học sinh tiểu học có thể chưa có CCCD).',
-      '3. "Mã lớp": chọn từ danh sách xổ xuống (mã có trong bảng bên dưới). Nếu để trống, hệ thống dùng lớp đang chọn trên màn hình Học sinh.',
-      '4. Số điện thoại và CCCD được định dạng văn bản để giữ số 0 ở đầu.',
-      '5. Học sinh trùng họ tên trong cùng một lớp sẽ bị bỏ qua.',
-      '6. Lưu file rồi chọn "Nhập Excel" trên màn hình Học sinh.',
+      '2. "Họ tên học sinh" là bắt buộc. Số điện thoại và CCCD không bắt buộc (học sinh tiểu học có thể chưa có CCCD).',
+      single ? '3. "Tên lớp" và "Mã lớp" đã điền sẵn đúng lớp này. Nếu để trống, hệ thống tự hiểu là lớp đang mở.'
+        : '3. "Mã lớp": chọn từ danh sách xổ xuống (mã có trong bảng bên dưới).',
+      '4. "Ngày bắt đầu học": ví dụ lớp khai giảng 01/10 nhưng em này vào học từ 15/10 thì điền 15/10/2026. Học phí và điểm danh sẽ chỉ tính từ ngày đó. Để trống nếu học từ đầu khóa.',
+      '5. Số điện thoại và CCCD được định dạng văn bản để giữ số 0 ở đầu.',
+      '6. Học sinh trùng họ tên trong cùng một lớp sẽ bị bỏ qua.',
+      '7. Lưu file rồi chọn "Nhập Excel" trong trang của lớp.',
     ], { head: ['Mã lớp', 'Tên lớp', 'Lịch học'], rows: classes.map((k) => [k.code, k.name, U.scheduleText(k)]) });
     for (let i = 0; i < 300; i++) {
       const row = firstRow + i;
-      ws.getCell(row, 3).numFmt = '@'; ws.getCell(row, 4).numFmt = '@';
-      if (i >= 2) for (let col = 1; col <= 5; col++) { const cell = ws.getCell(row, col); cell.border = border; cell.font = { name: FONT, size: 10.5 }; }
-      if (guide.range && classes.length) ws.getCell(row, 2).dataValidation = { type: 'list', allowBlank: true, formulae: [guide.range], showErrorMessage: false };
-      if (i >= 2) ws.getCell(row, 2).alignment = { horizontal: 'center' };
-      if (i >= 2) { ws.getCell(row, 3).alignment = { horizontal: 'center' }; ws.getCell(row, 4).alignment = { horizontal: 'center' }; }
+      ws.getCell(row, 4).numFmt = '@'; ws.getCell(row, 5).numFmt = '@'; ws.getCell(row, 6).numFmt = '@';
+      if (i >= 2) {
+        for (let col = 1; col <= 7; col++) { const cell = ws.getCell(row, col); cell.border = border; cell.font = { name: FONT, size: 10.5 }; }
+        ws.getCell(row, 3).alignment = { horizontal: 'center' }; ws.getCell(row, 4).alignment = { horizontal: 'center' };
+        ws.getCell(row, 5).alignment = { horizontal: 'center' }; ws.getCell(row, 6).alignment = { horizontal: 'center' };
+        if (single && i < 120) { ws.getCell(row, 2).value = cname; ws.getCell(row, 3).value = code; }
+      }
+      if (!single && guide.range) ws.getCell(row, 3).dataValidation = { type: 'list', allowBlank: true, formulae: [guide.range], showErrorMessage: false };
     }
     ws.autoFilter = undefined;
-    await saveBook(wb, 'Mau_nhap_hoc_sinh.xlsx');
+    await saveBook(wb, single ? `Mau_nhap_hoc_sinh_${slug(c.code)}.xlsx` : 'Mau_nhap_hoc_sinh.xlsx');
   });
+
+  const parseJoinDate = (v) => {
+    v = String(v || '').trim();
+    if (!v) return '';
+    let m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/.exec(v);
+    if (m) { let y = +m[3]; if (y < 100) y += 2000; return `${y}-${U.pad(m[2])}-${U.pad(m[1])}`; }
+    m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v);
+    if (m) return `${m[1]}-${U.pad(m[2])}-${U.pad(m[3])}`;
+    if (/^\d{5}$/.test(v)) { const d = new Date(Math.round((+v - 25569) * 86400000)); return `${d.getUTCFullYear()}-${U.pad(d.getUTCMonth() + 1)}-${U.pad(d.getUTCDate())}`; }
+    return 'INVALID';
+  };
 
   X.parseStudents = async (file) => {
     const rows = rowsOf(await X.read(file));
     const hi = headerIndex(rows, (h) => h.some((x) => x.includes('ho va ten') || x.includes('ho ten')));
-    if (hi < 0) throw new Error('Không tìm thấy cột "Họ và tên". Hãy dùng file mẫu của hệ thống.');
+    if (hi < 0) throw new Error('Không tìm thấy cột "Họ tên học sinh". Hãy dùng file mẫu của hệ thống.');
     const h = rows[hi];
     const iName = findCol(h, 'ho va ten', 'ho ten');
-    const iClass = findCol(h, 'ma lop', 'lop');
+    const iClassName = findCol(h, 'ten lop');
+    const iClass = findCol(h, 'ma lop');
     const iPhone = findCol(h, 'so dien thoai', 'sdt', 'dien thoai');
     const iId = findCol(h, 'cccd', 'can cuoc');
+    const iDate = findCol(h, 'ngay bat dau', 'ngay vao hoc', 'bat dau hoc');
     const iNote = findCol(h, 'ghi chu');
     return rows.slice(hi + 1).map((r, i) => ({
       line: hi + i + 2,
       name: String(r[iName] || '').replace(/\s+/g, ' ').trim(),
+      className: iClassName >= 0 ? String(r[iClassName] || '').trim() : '',
       classCode: iClass >= 0 ? String(r[iClass] || '').trim() : '',
       phone: iPhone >= 0 ? fixPhone(r[iPhone]) : '',
       cccd: iId >= 0 ? fixId(r[iId]) : '',
+      startDate: iDate >= 0 ? parseJoinDate(r[iDate]) : '',
       note: iNote >= 0 ? String(r[iNote] || '').trim() : '',
     })).filter((r) => (r.name || r.phone) && !/\(mẫu\)\s*$/i.test(r.name));
   };

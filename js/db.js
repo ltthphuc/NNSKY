@@ -29,7 +29,7 @@
    *  CHẾ ĐỘ DÙNG THỬ (localStorage)
    * ===================================================================== */
   const Demo = (() => {
-    const KEY = 'sky_demo_v5', SKEY = 'sky_demo_session_v5';
+    const KEY = 'sky_demo_v6', SKEY = 'sky_demo_session_v6';
     let store = null, listener = null;
 
     function seed() {
@@ -77,13 +77,14 @@
           s.students[sid] = {
             name, classId: id, teacherId: t, teacherIds: tids, code: `${code}-${U.pad(i)}`, status: 'active',
             phone: '09' + String(Math.floor(10000000 + rnd() * 89999999)), cccd: i === 1 ? '079318000123' : '', note: '',
+            startDate: g === 3 && i === 2 ? `${y}-${U.pad(m)}-15` : '',
           };
         }
         // điểm danh mẫu từ 45 ngày trước đến hôm nay
         const from = new Date(); from.setDate(from.getDate() - 45);
         U.sessions(s.classes[id], [U.ymd(from), startDate].sort().pop(), U.today()).forEach((d) => {
           const records = {};
-          Object.entries(s.students).filter(([, v]) => v.classId === id).forEach(([sid]) => { records[sid] = rnd() > 0.14; });
+          Object.entries(s.students).filter(([, v]) => v.classId === id).forEach(([sid, v]) => { if (v.startDate && d < v.startDate) return; records[sid] = rnd() > 0.14; });
           s.attendance[`${id}_${d}`] = { classId: id, teacherId: t, teacherIds: tids, date: d, records, updatedBy: 'Dữ liệu mẫu' };
           const tr = { [t]: { present: true, periods: 2 } };
           if (ta) tr[ta] = { present: rnd() > 0.1, periods: 2 };

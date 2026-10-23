@@ -55,7 +55,7 @@ window.Views = window.Views || {};
       ? classes.map((c) => {
           const n = active.filter((s) => s.classId === c.id).length;
           return `<div class="list-item"><div class="avatar" style="border-radius:12px">${esc(c.grade)}</div>
-            <div class="grow"><b>${esc(c.name)}</b><div class="small muted">${esc(U.scheduleText(c))}</div></div>
+            <div class="grow"><a href="#/classes/${c.id}"><b>${esc(c.name)}</b></a><div class="small muted">${esc(U.scheduleText(c))}</div></div>
             <div class="right"><b>${n}</b><div class="small muted">học sinh</div></div></div>`;
         }).join('')
       : empty('classes', 'Chưa có lớp nào', DB.isAdmin() ? 'Vào mục Lớp học để tạo lớp mới.' : 'Quản trị viên chưa phân công lớp cho bạn.');
@@ -77,13 +77,14 @@ window.Views = window.Views || {};
    *  LỚP HỌC
    * =================================================================== */
   Views.classes = async (root, params = {}) => {
+    if (params.id) return classDetail(root, params.id);
     const admin = DB.isAdmin();
     const students = await DB.q('students');
     const rowHtml = (c) => {
       const n = students.filter((s) => s.classId === c.id && s.status !== 'inactive').length;
       return `<tr>
         <td><span class="badge blue">${esc(c.code)}</span></td>
-        <td class="name">${esc(c.name)}</td>
+        <td class="name"><a href="#/classes/${c.id}">${esc(c.name)}</a></td>
         <td class="nowrap">${esc(U.scheduleText(c))}</td>
         <td>${esc(termName(c.term))}<div class="small muted">${esc(c.schoolYear || '')}</div></td>
         <td>${esc(App.teacherName(c.teacherId))}${c.assistantId ? `<div class="small muted">TG: ${esc(App.teacherName(c.assistantId))}</div>` : ''}</td>
@@ -91,7 +92,7 @@ window.Views = window.Views || {};
         <td class="right mono">${money(c.fee)}<div class="small muted">${c.feeMode === 'attend' ? 'Theo buổi học' : 'Theo buổi nghỉ'}</div></td>
         <td class="center"><b>${n}</b></td>
         <td>${c.status === 'closed' ? '<span class="badge">Đã đóng</span>' : '<span class="badge ok">Đang mở</span>'}</td>
-        <td class="nowrap right"><button class="icon-btn" data-rep="${c.id}" title="Xuất báo cáo cả lớp">${icon('download')}</button>${admin ? `<button class="icon-btn" data-edit="${c.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn danger" data-del="${c.id}" title="Xóa">${icon('trash')}</button>` : ''}</td>
+        <td class="nowrap right"><a class="btn sm soft" href="#/classes/${c.id}">${icon('students', 15)} Học sinh</a> <button class="icon-btn" data-rep="${c.id}" title="Xuất báo cáo cả lớp">${icon('download')}</button>${admin ? `<button class="icon-btn" data-edit="${c.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn danger" data-del="${c.id}" title="Xóa">${icon('trash')}</button>` : ''}</td>
       </tr>`;
     };
     root.innerHTML = `${head('Lớp học', admin ? 'Tạo lớp theo học kỳ hoặc năm học, mỗi lớp có mã riêng.' : 'Các lớp bạn được phân công.', admin ? `<button class="btn" id="add">${icon('plus')} Tạo lớp mới</button>` : '')}
@@ -265,7 +266,7 @@ window.Views = window.Views || {};
   }
 
   /* ===================================================================
-   *  HỌC SINH
+   *  HỌC SINH CỦA LỚP (nằm trong trang chi tiết lớp)
    * =================================================================== */
   const nextCode = (cls, all) => {
     let mx = 0;
@@ -273,91 +274,94 @@ window.Views = window.Views || {};
     return mx;
   };
 
-  Views.students = async (root, params) => {
-    const admin = DB.isAdmin();
-    const open = App.openClasses();
-    let all = await DB.q('students');
-    const st = (App.studentsState = App.studentsState || { classId: '', q: '', status: 'active' });
-    if (params.class !== undefined) st.classId = params.class;
-    if (st.classId && !App.classById(st.classId)) st.classId = '';
+  Views.students = async () => { App.go('classes'); };
 
+  /* Trang chi tiết lớp: xem, thêm, sửa, nhập Excel, xuất báo cáo học sinh của lớp */
+  async function classDetail(root, id) {
+    const cls = App.classById(id);
+    if (!cls) { root.innerHTML = `${head('Không tìm thấy lớp')}<div class="card">${empty('classes', 'Lớp không tồn tại hoặc bạn không có quyền xem', '<a href="#/classes">Quay lại danh sách lớp</a>')}</div>`; return; }
+    const admin = DB.isAdmin();
+    let all = await DB.q('students', [['classId', '==', id]]);
+    const st = { q: '', status: 'active' };
     const picked = new Set();
     const filtered = () => U.sortVN(all.filter((s) =>
-      (!st.classId || s.classId === st.classId) &&
       (st.status === 'all' || (st.status === 'inactive') === (s.status === 'inactive')) &&
       (!st.q || U.norm(s.name + ' ' + (s.phone || '') + ' ' + (s.code || '')).includes(U.norm(st.q)))));
+    const reload = async () => { all = await DB.q('students', [['classId', '==', id]]); draw(); };
 
-    const draw = () => {
-      const list = filtered();
-      const body = list.map((s, i) => {
-        const c = App.classById(s.classId);
-        return `<tr class="${picked.has(s.id) ? 'picked' : ''}">
-          <td class="chk"><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>
-          <td class="muted">${i + 1}</td>
-          <td class="small muted nowrap">${esc(s.code || '')}</td>
-          <td class="name">${esc(s.name)}</td>
-          <td>${c ? `<span class="badge blue">${esc(c.name)}</span>` : '<span class="muted">?</span>'}</td>
-          <td class="mono">${esc(s.phone || '')}</td>
-          <td class="mono muted">${esc(admin ? s.cccd || '' : U.maskId(s.cccd || ''))}</td>
-          <td>${s.status === 'inactive' ? '<span class="badge">Đã nghỉ</span>' : '<span class="badge ok">Đang học</span>'}</td>
-          <td class="nowrap right"><button class="icon-btn" data-rep="${s.id}" title="Tải báo cáo của học sinh này">${icon('download')}</button><button class="icon-btn" data-edit="${s.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn danger" data-del="${s.id}" title="Xóa">${icon('trash')}</button></td>
-        </tr>`;
-      }).join('');
-      root.querySelector('#tbl').innerHTML = list.length
-        ? `<table class="t"><thead><tr><th class="chk"><input type="checkbox" id="pickall" title="Chọn tất cả"></th><th>#</th><th>Mã HS</th><th>Họ và tên</th><th>Lớp</th><th>Số điện thoại</th><th>CCCD</th><th>Trạng thái</th><th></th></tr></thead><tbody>${body}</tbody></table>`
-        : empty('students', 'Chưa có học sinh', 'Bấm "Thêm học sinh" hoặc "Nhập Excel" để thêm danh sách.');
-      const pa = root.querySelector('#pickall');
-      if (pa) pa.checked = list.length > 0 && list.every((x) => picked.has(x.id));
-      syncCount(list);
-    };
     const syncCount = (list) => {
       const n = list.filter((x) => picked.has(x.id)).length;
       root.querySelector('#count').textContent = `${list.length} học sinh${n ? ` · đã chọn ${n}` : ''}`;
       root.querySelector('#exp').innerHTML = `${icon('download')} Xuất báo cáo${n ? ` (${n})` : ''}`;
     };
+    const draw = () => {
+      const list = filtered();
+      const body = list.map((s, i) => `<tr class="${picked.has(s.id) ? 'picked' : ''}">
+          <td class="chk"><input type="checkbox" data-pick="${s.id}" ${picked.has(s.id) ? 'checked' : ''}></td>
+          <td class="muted">${i + 1}</td>
+          <td class="small muted nowrap">${esc(s.code || '')}</td>
+          <td class="name">${esc(s.name)}</td>
+          <td class="mono">${esc(s.phone || '')}</td>
+          <td class="mono muted">${esc(admin ? s.cccd || '' : U.maskId(s.cccd || ''))}</td>
+          <td class="nowrap">${s.startDate ? esc(U.fmtDate(s.startDate)) : '<span class="muted">Từ đầu khóa</span>'}</td>
+          <td>${s.status === 'inactive' ? '<span class="badge">Đã nghỉ</span>' : '<span class="badge ok">Đang học</span>'}</td>
+          <td class="nowrap right"><button class="icon-btn" data-rep="${s.id}" title="Tải báo cáo của học sinh này">${icon('download')}</button><button class="icon-btn" data-edit="${s.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn danger" data-del="${s.id}" title="Xóa">${icon('trash')}</button></td>
+        </tr>`).join('');
+      root.querySelector('#tbl').innerHTML = list.length
+        ? `<table class="t"><thead><tr><th class="chk"><input type="checkbox" id="pickall" title="Chọn tất cả"></th><th>#</th><th>Mã HS</th><th>Họ và tên</th><th>Số điện thoại</th><th>CCCD</th><th>Bắt đầu học</th><th>Trạng thái</th><th></th></tr></thead><tbody>${body}</tbody></table>`
+        : empty('students', 'Chưa có học sinh', 'Bấm "Thêm học sinh" hoặc "Nhập Excel" để thêm danh sách cho lớp này.');
+      const pa = root.querySelector('#pickall');
+      if (pa) pa.checked = list.length > 0 && list.every((x) => picked.has(x.id));
+      syncCount(list);
+    };
 
-    root.innerHTML = `${head('Học sinh', 'Danh sách học sinh theo lớp: họ tên, lớp, số điện thoại, CCCD.',
-      `<button class="btn ghost" id="tpl">${icon('download')} Tải file mẫu</button>
-       <button class="btn ghost" id="imp">${icon('upload')} Nhập Excel</button>
-       <button class="btn ghost" id="exp">${icon('download')} Xuất báo cáo</button>
-       <button class="btn" id="add">${icon('plus')} Thêm học sinh</button>
-       <input type="file" id="file" accept=".xlsx,.xls,.csv" class="hidden">`)}
+    const teachersText = [App.teacherName(cls.teacherId), cls.assistantId ? 'Trợ giảng: ' + App.teacherName(cls.assistantId) : ''].filter(Boolean).join(' · ');
+    root.innerHTML = `<div class="page-head"><div><a href="#/classes" class="small">${icon('back', 14)} Danh sách lớp</a>
+        <h1 style="margin-top:6px">${esc(cls.name)} <span class="badge blue" style="vertical-align:middle">${esc(cls.code)}</span></h1>
+        <p>${esc(U.scheduleText(cls))} · ${esc(teachersText)}</p></div>
+        <div class="row">${admin ? `<button class="btn ghost" id="editcls">${icon('edit')} Sửa lớp</button>` : ''}
+          <button class="btn ghost" id="tpl">${icon('download')} Tải file mẫu</button>
+          <button class="btn ghost" id="imp">${icon('upload')} Nhập Excel</button>
+          <button class="btn ghost" id="exp">${icon('download')} Xuất báo cáo</button>
+          <button class="btn" id="add">${icon('plus')} Thêm học sinh</button>
+          <input type="file" id="file" accept=".xlsx,.xls,.csv" class="hidden"></div></div>
       <div class="card toolbar">
-        <select class="select" id="fclass">${App.classOptions(st.classId, { all: true, closed: true })}</select>
         <select class="select" id="fstatus"><option value="active">Đang học</option><option value="inactive">Đã nghỉ</option><option value="all">Tất cả</option></select>
-        <div class="search">${icon('search', 16)}<input class="input" id="q" placeholder="Tìm theo tên, SĐT, mã HS..." value="${esc(st.q)}"></div>
+        <div class="search">${icon('search', 16)}<input class="input" id="q" placeholder="Tìm theo tên, SĐT, mã HS..."></div>
         <span class="muted grow right" id="count"></span>
       </div>
       <div class="card"><div class="table-wrap" id="tbl"></div></div>`;
-    root.querySelector('#fstatus').value = st.status;
     draw();
 
-    root.querySelector('#fclass').onchange = (e) => { st.classId = e.target.value; draw(); };
+    const ec = root.querySelector('#editcls');
+    if (ec) ec.onclick = () => classModal(cls);
     root.querySelector('#fstatus').onchange = (e) => { st.status = e.target.value; draw(); };
     root.querySelector('#q').oninput = (e) => { st.q = e.target.value; draw(); };
-    root.querySelector('#add').onclick = () => studentModal(null, all, async () => { all = await DB.q('students'); draw(); });
-    root.querySelector('#tpl').onclick = () => { try { X.studentTemplate(open); } catch (e) { U.toast(e.message, 'err'); } };
+    root.querySelector('#add').onclick = () => studentModal(null, cls, reload);
+    root.querySelector('#tpl').onclick = () => { try { X.studentTemplate([cls]); } catch (e) { U.toast(e.message, 'err'); } };
     root.querySelector('#exp').onclick = () => {
       const list = filtered();
-      Report.open({ all, filtered: list, selected: list.filter((x) => picked.has(x.id)).map((x) => x.id), classId: st.classId });
+      Report.open({ all, filtered: list, selected: list.filter((x) => picked.has(x.id)).map((x) => x.id), classId: id, title: `Báo cáo lớp ${cls.name}` });
     };
     root.querySelector('#tbl').onchange = (e) => {
       const t = e.target;
       if (t.id === 'pickall') { filtered().forEach((x) => { if (t.checked) picked.add(x.id); else picked.delete(x.id); }); draw(); return; }
-      if (t.dataset.pick) { if (t.checked) picked.add(t.dataset.pick); else picked.delete(t.dataset.pick); t.closest('tr').classList.toggle('picked', t.checked); syncCount(filtered()); const pa = root.querySelector('#pickall'); if (pa) pa.checked = filtered().every((x) => picked.has(x.id)); }
+      if (t.dataset.pick) {
+        if (t.checked) picked.add(t.dataset.pick); else picked.delete(t.dataset.pick);
+        t.closest('tr').classList.toggle('picked', t.checked); syncCount(filtered());
+        const pa = root.querySelector('#pickall'); if (pa) pa.checked = filtered().every((x) => picked.has(x.id));
+      }
     };
     root.querySelector('#imp').onclick = () => root.querySelector('#file').click();
     root.querySelector('#file').onchange = async (e) => {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
-      try {
-        await importFlow(f, all, st.classId, async () => { all = await DB.q('students'); draw(); });
-      } catch (err) { U.toast(err.message, 'err'); }
+      try { await importFlow(f, all, cls, reload); } catch (err) { U.toast(err.message, 'err'); }
     };
     root.querySelector('#tbl').onclick = async (e) => {
       const ed = e.target.closest('[data-edit]'), de = e.target.closest('[data-del]'), rp = e.target.closest('[data-rep]');
-      if (rp) { const one = all.find((x) => x.id === rp.dataset.rep); Report.open({ all, filtered: [one], selected: [one.id], classId: one.classId, title: `Báo cáo: ${one.name}` }); return; }
-      if (ed) studentModal(all.find((s) => s.id === ed.dataset.edit), all, async () => { all = await DB.q('students'); draw(); });
+      if (rp) { const one = all.find((x) => x.id === rp.dataset.rep); Report.open({ all, filtered: [one], selected: [one.id], classId: id, title: `Báo cáo: ${one.name}` }); return; }
+      if (ed) studentModal(all.find((s) => s.id === ed.dataset.edit), cls, reload);
       if (de) {
         const s = all.find((x) => x.id === de.dataset.del);
         if (!(await U.confirm(`Xóa học sinh <b>${esc(s.name)}</b>? Nếu chỉ nghỉ học, nên đổi trạng thái sang "Đã nghỉ" để giữ lịch sử điểm danh.`, 'Xóa học sinh'))) return;
@@ -367,25 +371,24 @@ window.Views = window.Views || {};
         draw();
       }
     };
-  };
+  }
 
-  function studentModal(s, all, done) {
+  function studentModal(s, cls0, done) {
     const isNew = !s;
     const admin = DB.isAdmin();
     const classes = App.openClasses();
-    if (s && !classes.some((c) => c.id === s.classId) && App.classById(s.classId)) classes.push(App.classById(s.classId));
-    if (!classes.length) return U.toast('Chưa có lớp nào để thêm học sinh.', 'err');
-    const cur = App.studentsState && App.studentsState.classId;
+    if (!classes.some((c) => c.id === cls0.id)) classes.push(cls0);
     const hideId = s && !admin && s.cccd;
     U.modal({
-      title: isNew ? 'Thêm học sinh' : 'Sửa thông tin học sinh', okText: isNew ? 'Thêm' : 'Lưu',
+      title: isNew ? `Thêm học sinh vào ${cls0.name}` : 'Sửa thông tin học sinh', okText: isNew ? 'Thêm' : 'Lưu',
       body: `<div class="form-grid">
         <div class="full"><label class="f">Họ và tên *</label><input class="input" id="name" value="${esc(s ? s.name : '')}"></div>
-        <div><label class="f">Lớp *</label><select class="select" id="cls">${classes.map((c) => `<option value="${c.id}" ${(s ? s.classId : cur || classes[0].id) === c.id ? 'selected' : ''}>${esc(c.name)} (${esc(c.code)})</option>`).join('')}</select></div>
+        <div><label class="f">Lớp *</label><select class="select" id="cls">${classes.map((c) => `<option value="${c.id}" ${(s ? s.classId : cls0.id) === c.id ? 'selected' : ''}>${esc(c.name)} (${esc(c.code)})</option>`).join('')}</select></div>
+        <div><label class="f">Ngày bắt đầu học</label><input class="input" type="date" id="sdate" value="${esc(s ? s.startDate || '' : '')}"><div class="hint">Để trống nếu học từ đầu khóa. Học phí và điểm danh chỉ tính từ ngày này.</div></div>
         <div><label class="f">Số điện thoại</label><input class="input" id="phone" inputmode="tel" value="${esc(s ? s.phone || '' : '')}"></div>
         <div><label class="f">CCCD</label><input class="input" id="cccd" inputmode="numeric" value="${hideId ? '' : esc(s ? s.cccd || '' : '')}" placeholder="${hideId ? 'Đã có (' + esc(U.maskId(s.cccd)) + ') - để trống nếu giữ nguyên' : '12 số (không bắt buộc)'}"></div>
-        ${isNew ? '<div></div>' : `<div><label class="f">Trạng thái</label><select class="select" id="status"><option value="active" ${s.status !== 'inactive' ? 'selected' : ''}>Đang học</option><option value="inactive" ${s.status === 'inactive' ? 'selected' : ''}>Đã nghỉ</option></select></div>`}
-        <div class="full"><label class="f">Ghi chú</label><input class="input" id="note" value="${esc(s ? s.note || '' : '')}" placeholder="Ví dụ: tên phụ huynh, lưu ý..."></div>
+        ${isNew ? '' : `<div><label class="f">Trạng thái</label><select class="select" id="status"><option value="active" ${s.status !== 'inactive' ? 'selected' : ''}>Đang học</option><option value="inactive" ${s.status === 'inactive' ? 'selected' : ''}>Đã nghỉ</option></select></div>`}
+        <div class="${isNew ? 'full' : ''}"><label class="f">Ghi chú</label><input class="input" id="note" value="${esc(s ? s.note || '' : '')}" placeholder="Ví dụ: tên phụ huynh, lưu ý..."></div>
       </div>`,
       onOk: async (w) => {
         const v = (id) => (w.querySelector('#' + id) ? w.querySelector('#' + id).value.trim() : '');
@@ -396,11 +399,11 @@ window.Views = window.Views || {};
         if (cccd && !/^(\d{9}|\d{12})$/.test(cccd)) throw new Error('CCCD phải gồm 12 chữ số (hoặc 9 số với CMND cũ).');
         if (!cccd && hideId) cccd = s.cccd;
         const cls = App.classById(v('cls'));
-        const dup = all.find((x) => x.id !== (s && s.id) && x.classId === cls.id && U.norm(x.name) === U.norm(v('name')));
+        const inClass = await DB.q('students', [['classId', '==', cls.id]]);
+        const dup = inClass.find((x) => x.id !== (s && s.id) && U.norm(x.name) === U.norm(v('name')));
         if (dup && !(await U.confirm(`Lớp ${esc(cls.name)} đã có học sinh tên "${esc(dup.name)}". Vẫn thêm?`, 'Vẫn thêm', false))) return false;
-        const data = { name: v('name').replace(/\s+/g, ' '), classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), phone, cccd, note: v('note'), status: isNew ? 'active' : v('status') };
-        if (isNew) data.code = `${cls.code}-${U.pad(nextCode(cls, all) + 1)}`;
-        else if (s.classId !== cls.id) data.code = `${cls.code}-${U.pad(nextCode(cls, all) + 1)}`;
+        const data = { name: v('name').replace(/\s+/g, ' '), classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), phone, cccd, note: v('note'), startDate: v('sdate'), status: isNew ? 'active' : v('status') };
+        if (isNew || s.classId !== cls.id) data.code = `${cls.code}-${U.pad(nextCode(cls, inClass) + 1)}`;
         await DB.save('students', s && s.id, data);
         U.toast(isNew ? 'Đã thêm học sinh' : 'Đã lưu', 'ok');
         await done();
@@ -408,44 +411,41 @@ window.Views = window.Views || {};
     });
   }
 
-  async function importFlow(file, all, filterClassId, done) {
+  async function importFlow(file, all, cls, done) {
     const rows = await X.parseStudents(file);
     if (!rows.length) throw new Error('File không có dòng dữ liệu nào.');
-    const avail = App.openClasses();
-    const byCode = Object.fromEntries(avail.map((c) => [U.norm(c.code), c]));
-    const exist = new Set(all.map((s) => s.classId + '|' + U.norm(s.name)));
+    const exist = new Set(all.map((s) => U.norm(s.name)));
     const seen = new Set();
     const items = rows.map((r) => {
-      const cls = r.classCode ? byCode[U.norm(r.classCode)] : avail.find((c) => c.id === filterClassId);
       let err = '';
       if (!r.name) err = 'Thiếu họ tên';
-      else if (!cls) err = r.classCode ? `Không có lớp "${r.classCode}"` : 'Chưa chọn lớp (cột Mã lớp trống)';
+      else if (r.classCode && U.norm(r.classCode) !== U.norm(cls.code)) err = `Thuộc lớp khác (mã ${r.classCode})`;
+      else if (r.startDate === 'INVALID') err = 'Ngày bắt đầu học không hợp lệ';
       else {
-        const key = cls.id + '|' + U.norm(r.name);
+        const key = U.norm(r.name);
         if (exist.has(key) || seen.has(key)) err = 'Trùng, bỏ qua';
         seen.add(key);
       }
-      return { ...r, cls, err };
+      return { ...r, err };
     });
     const good = items.filter((i) => !i.err);
     U.modal({
-      title: 'Xem trước dữ liệu nhập', wide: true, okText: `Nhập ${good.length} học sinh`,
+      title: `Xem trước danh sách nhập vào ${cls.name}`, wide: true, okText: `Nhập ${good.length} học sinh`,
       body: `<div class="alert ${good.length ? 'ok' : 'warn'}" style="margin-bottom:12px">Đọc được <b>${items.length}</b> dòng: <b>${good.length}</b> hợp lệ, <b>${items.length - good.length}</b> bị bỏ qua.</div>
-        <div class="preview-box"><table class="t"><thead><tr><th>Dòng</th><th>Họ và tên</th><th>Lớp</th><th>SĐT</th><th>CCCD</th><th>Kết quả</th></tr></thead><tbody>
-        ${items.map((i) => `<tr><td class="muted">${i.line}</td><td>${esc(i.name)}</td><td>${i.cls ? esc(i.cls.name) : '-'}</td><td>${esc(i.phone)}</td><td>${esc(U.maskId(i.cccd))}</td><td>${i.err ? `<span class="badge err">${esc(i.err)}</span>` : '<span class="badge ok">Hợp lệ</span>'}</td></tr>`).join('')}
+        <div class="preview-box"><table class="t"><thead><tr><th>Dòng</th><th>Họ tên</th><th>SĐT</th><th>CCCD</th><th>Bắt đầu học</th><th>Kết quả</th></tr></thead><tbody>
+        ${items.map((i) => `<tr><td class="muted">${i.line}</td><td>${esc(i.name)}</td><td>${esc(i.phone)}</td><td>${esc(U.maskId(i.cccd))}</td><td>${i.startDate && i.startDate !== 'INVALID' ? U.fmtDate(i.startDate) : '<span class="muted">Từ đầu khóa</span>'}</td><td>${i.err ? `<span class="badge err">${esc(i.err)}</span>` : '<span class="badge ok">Hợp lệ</span>'}</td></tr>`).join('')}
         </tbody></table></div>`,
       onOk: async () => {
         if (!good.length) throw new Error('Không có dòng hợp lệ để nhập.');
-        const counters = {};
+        let n = nextCode(cls, all);
         for (const i of good) {
-          if (counters[i.cls.id] === undefined) counters[i.cls.id] = nextCode(i.cls, all);
-          counters[i.cls.id]++;
+          n++;
           await DB.save('students', null, {
-            name: i.name, classId: i.cls.id, teacherId: i.cls.teacherId || '', teacherIds: U.classTeachers(i.cls), phone: i.phone, cccd: i.cccd, note: i.note,
-            status: 'active', code: `${i.cls.code}-${U.pad(counters[i.cls.id])}`,
+            name: i.name, classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), phone: i.phone, cccd: i.cccd, note: i.note,
+            startDate: i.startDate || '', status: 'active', code: `${cls.code}-${U.pad(n)}`,
           });
         }
-        U.toast(`Đã nhập ${good.length} học sinh`, 'ok');
+        U.toast(`Đã nhập ${good.length} học sinh vào ${cls.name}`, 'ok');
         await done();
       },
     });

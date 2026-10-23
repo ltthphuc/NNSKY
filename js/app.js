@@ -29,7 +29,6 @@
     { name: 'attendance', label: 'Điểm danh', icon: 'attendance', group: 'Lớp học' },
     { name: 'assessments', label: 'Đánh giá & điểm', icon: 'star', group: 'Lớp học' },
     { name: 'tuition', label: 'Học phí', icon: 'wallet', group: 'Lớp học' },
-    { name: 'students', label: 'Học sinh', icon: 'students' },
     { name: 'payroll', label: 'Công & lương GV', icon: 'clock' },
     { name: 'assign', label: 'Phân công & đơn giá', icon: 'teachers', admin: true },
     { name: 'teachers', label: 'Tài khoản giáo viên', icon: 'students', admin: true },
@@ -62,6 +61,7 @@
   App.render = async () => {
     if (!App.me) return;
     const { name, params } = parseHash();
+    if (name === 'students') { App.go('classes'); return; } // danh sách học sinh nay nằm trong từng lớp
     const item = NAV.find((n) => n.name === name && (!n.admin || DB.isAdmin())) || NAV[0];
     document.body.classList.remove('nav-open');
     document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.nav === item.name));

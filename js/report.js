@@ -13,7 +13,7 @@
   const MONEY = '#,##0" đ"';
 
   const GROUPS = [
-    ['Thông tin học sinh', [['code', 'Mã học sinh'], ['cls', 'Lớp'], ['phone', 'Số điện thoại'], ['cccd', 'CCCD'], ['note', 'Ghi chú'], ['status', 'Trạng thái (đang học / đã nghỉ)']]],
+    ['Thông tin học sinh', [['code', 'Mã học sinh'], ['cls', 'Lớp'], ['sdate', 'Ngày bắt đầu học'], ['phone', 'Số điện thoại'], ['cccd', 'CCCD'], ['note', 'Ghi chú'], ['status', 'Trạng thái (đang học / đã nghỉ)']]],
     ['Điểm các bài kiểm tra', [['scores', 'Điểm từng bài kiểm tra'], ['avg', 'Điểm trung bình'], ['comments', 'Kèm nhận xét của từng bài']]],
     ['Điểm danh', [['att', 'Số buổi đi học'], ['absent', 'Số buổi vắng'], ['detail', 'Chi tiết từng buổi (✓ / V)']]],
     ['Học phí của tháng', [['tuition', 'Hiện mục học phí'], ['base', 'Học phí gốc của lớp'], ['deduct', 'Số tiền giảm / trừ'], ['total', 'Số tiền phải đóng'], ['paid', 'Trạng thái đã đóng']]],
@@ -205,6 +205,7 @@
     if (o.code) add({ h: 'Mã HS', w: 22 }, (s) => s.code || '');
     add({ h: 'Họ và tên', w: 28, bold: true }, (s) => s.name);
     if (o.cls) add({ h: 'Lớp', w: 12, align: 'center' }, (s) => (App.classById(s.classId) || {}).name || '');
+    if (o.sdate) add({ h: 'Bắt đầu học', w: 14, align: 'center' }, (s) => (s.startDate ? U.fmtDate(s.startDate) : 'Từ đầu khóa'));
     if (o.phone) add({ h: 'Số điện thoại', w: 16, align: 'center' }, (s) => s.phone || '');
     if (o.cccd) add({ h: 'CCCD', w: 18, align: 'center' }, (s) => (admin ? s.cccd || '' : U.maskId(s.cccd || '')));
     if (o.status) add({ h: 'Trạng thái', w: 12, align: 'center' }, (s) => (s.status === 'inactive' ? 'Đã nghỉ' : 'Đang học'));

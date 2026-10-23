@@ -43,9 +43,12 @@
       dirty = false;
       savedAt = doc ? `Đã lưu${doc.updatedBy ? ' bởi ' + doc.updatedBy : ''}` : 'Chưa điểm danh buổi này';
     };
+    // chỉ những học sinh đã bắt đầu học tại ngày được chọn mới có trong danh sách điểm danh
+    const roster = () => students.filter((s) => !s.startDate || !sel || s.startDate <= sel);
     const counts = () => {
-      const p = students.filter((s) => marks[s.id]).length;
-      return { p, a: students.length - p };
+      const r = roster();
+      const p = r.filter((s) => marks[s.id]).length;
+      return { p, a: r.length - p };
     };
 
     const render = () => {
@@ -55,7 +58,7 @@
         ? ss.map((d) => `<button class="chip ${d === sel ? 'sel' : ''} ${recorded.has(d) ? 'rec' : ''} ${d === today ? 'today' : ''}" data-chip="${d}"><span class="dot"></span><small>${U.dayName(U.parse(d).getDay())}</small><b>${U.shortDate(d)}</b></button>`).join('')
         : `<div class="alert warn">Không có buổi học nào trong ${U.monthLabel(month).toLowerCase()} theo lịch và thời gian học của lớp.</div>`;
       const { p, a } = counts();
-      const rows = students.map((s, i) => `<label class="att-row ${marks[s.id] ? '' : 'absent'}"><span class="stt">${i + 1}</span><input type="checkbox" data-sid="${s.id}" ${marks[s.id] ? 'checked' : ''}><span class="box">${icon('check', 18)}</span><span class="nm">${esc(s.name)}</span><span class="st">${marks[s.id] ? 'Có mặt' : 'Vắng'}</span></label>`).join('');
+      const rows = roster().map((s, i) => `<label class="att-row ${marks[s.id] ? '' : 'absent'}"><span class="stt">${i + 1}</span><input type="checkbox" data-sid="${s.id}" ${marks[s.id] ? 'checked' : ''}><span class="box">${icon('check', 18)}</span><span class="nm">${esc(s.name)}</span><span class="st">${marks[s.id] ? 'Có mặt' : 'Vắng'}</span></label>`).join('');
 
       // bảng tổng hợp tháng
       const byDate = Object.fromEntries(docs.map((d) => [d.date, d]));
@@ -64,11 +67,13 @@
         let ab = 0, pr = 0;
         const cells = ss.map((d) => {
           const v = byDate[d] && byDate[d].records && byDate[d].records[s.id];
+          if (s.startDate && d < s.startDate) return '<td class="mk-n" title="Chưa vào học">–</td>';
           if (v === true) { pr++; return '<td class="mk-p">✓</td>'; }
           if (v === false) { ab++; return '<td class="mk-a">✗</td>'; }
           return '<td class="mk-n">·</td>';
         }).join('');
-        const fee = U.calcFee(cls, settings, pr, ab);
+        const mineN = s.startDate ? ss.filter((d) => d >= s.startDate).length : ss.length;
+        const fee = U.calcFee(cls, settings, pr, ab, ss.length ? mineN / ss.length : 1);
         return `<tr><td class="muted">${i + 1}</td><td class="name">${esc(s.name)}</td>${cells}<td>${pr}</td><td><b>${ab}</b></td><td class="right mono"><b>${money(fee.total)}</b>${fee.deduct ? `<div class="small muted">-${money(fee.deduct)}</div>` : ''}</td></tr>`;
       }).join('');
 
@@ -91,11 +96,11 @@
           <div class="card-h">
             <div><h3>${U.dayName(U.parse(sel).getDay())}, ${U.fmtDate(sel)} · ${esc(U.timeText(U.slotFor(cls, sel)))}</h3><div class="small muted" id="saved">${esc(savedAt)}</div></div>
             <div class="grow"></div>
-            <div class="att-summary"><span class="badge ok" id="cp">Có mặt: ${p}</span><span class="badge err" id="ca">Vắng: ${a}</span><span class="badge" id="ct">Tổng: ${students.length}</span><span class="badge warn ${dirty ? '' : 'hidden'}" id="dirty">Chưa lưu</span></div>
+            <div class="att-summary"><span class="badge ok" id="cp">Có mặt: ${p}</span><span class="badge err" id="ca">Vắng: ${a}</span><span class="badge" id="ct">Tổng: ${roster().length}</span><span class="badge warn ${dirty ? '' : 'hidden'}" id="dirty">Chưa lưu</span></div>
           </div>
           <div class="row" style="padding:12px 16px 0"><button class="btn sm soft" id="allp">${icon('check', 15)} Có mặt tất cả</button><button class="btn sm ghost" id="alla">Vắng tất cả</button></div>
-          ${students.length ? `<div class="att-list">${rows}</div>` : empty('students', 'Lớp chưa có học sinh', 'Thêm học sinh ở mục Học sinh.')}
-          <div class="sticky-bar"><button class="btn ok lg" id="save" ${students.length ? '' : 'disabled'}>${icon('check')} Lưu điểm danh</button><button class="btn ghost" id="mkass">${icon('star')} Tạo đánh giá cho buổi này</button></div>
+          ${roster().length ? `<div class="att-list">${rows}</div>` : empty('students', 'Chưa có học sinh nào đang học vào ngày này', 'Thêm học sinh trong trang của lớp (Lớp học → chọn lớp).')}
+          <div class="sticky-bar"><button class="btn ok lg" id="save" ${roster().length ? '' : 'disabled'}>${icon('check')} Lưu điểm danh</button><button class="btn ghost" id="mkass">${icon('star')} Tạo đánh giá cho buổi này</button></div>
         </div>` : ''}
         ${students.length && ss.length ? `<div class="card mt"><div class="card-h"><h3>Tổng hợp ${U.monthLabel(month).toLowerCase()}</h3><span class="small muted">${esc(U.feeRuleText(cls, settings))}</span></div>
           <div class="table-wrap"><table class="t grid-mx"><thead><tr><th>#</th><th>Học sinh</th>${ss.map((d) => `<th>${U.shortDate(d)}</th>`).join('')}<th>Có mặt</th><th>Vắng</th><th class="right">Học phí tạm tính</th></tr></thead><tbody>${mx}</tbody></table></div></div>` : ''}`;
@@ -209,7 +214,7 @@
         try {
           const old = docs.find((d) => d.date === sel);
           const records = { ...((old && old.records) || {}) };
-          students.forEach((s) => { records[s.id] = !!marks[s.id]; });
+          roster().forEach((s) => { records[s.id] = !!marks[s.id]; });
           const data = { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), date: sel, records, updatedBy: App.me.name };
           const id = `${cls.id}_${sel}`;
           await DB.save('attendance', id, data, true);

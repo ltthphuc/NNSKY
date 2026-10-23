@@ -3,6 +3,8 @@
   const { esc, icon, money } = U;
   const { empty, head } = UI;
   const monthNav = (m) => `<div class="month-nav"><button class="icon-btn" data-mprev>${icon('left')}</button><b>${U.monthLabel(m)}</b><button class="icon-btn" data-mnext>${icon('right')}</button></div>`;
+  /* đọc lại bản mới nhất trước khi ghi để không đè dữ liệu người khác vừa sửa (nhiều người dùng cùng lúc) */
+  const fresh = async (col, id, cached) => { try { return (await DB.get(col, id)) || cached; } catch (e) { return cached; } };
   const noClass = (title) => `${head(title)}<div class="card">${empty('classes', 'Chưa có lớp nào', DB.isAdmin() ? 'Hãy vào mục Lớp học để tạo lớp trước.' : 'Quản trị viên chưa phân công lớp cho bạn.')}</div>`;
 
   /* ===================================================================
@@ -240,7 +242,7 @@
             const none = t.mode === 'none' || (t.mode === 'part' && off >= t.planned);
             trNew[tid] = none ? { present: false, periods: 0, planned: t.planned, note: t.note || '' } : { present: true, periods: t.planned - off, planned: t.planned, note: t.note || '' };
           }
-          const old = docs.find((d) => d.date === sel);
+          const old = await fresh('attendance', `${cls.id}_${sel}`, docs.find((d) => d.date === sel));
           const records = { ...((old && old.records) || {}) };
           roster().forEach((s) => { records[s.id] = !!marks[s.id]; });
           const data = { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), date: sel, records, updatedBy: App.me.name };
@@ -248,7 +250,7 @@
           await DB.save('attendance', id, data, true);
           docs = docs.filter((d) => d.date !== sel).concat([{ id, ...data }]);
           if (teacherIds().length) {
-            const oldT = tDocs.find((d) => d.date === sel);
+            const oldT = await fresh('teacherAttendance', `${cls.id}_${sel}`, tDocs.find((d) => d.date === sel));
             const tr = { ...((oldT && oldT.records) || {}), ...trNew };
             const tdata = { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), date: sel, records: tr, updatedBy: App.me.name };
             await DB.save('teacherAttendance', id, tdata, true);
@@ -695,7 +697,7 @@
           const touched = {};
           plan.forEach((p) => { (touched[`${p.c.id}_${p.d}`] = touched[`${p.c.id}_${p.d}`] || { c: p.c, d: p.d, items: [] }).items.push(p); });
           for (const [id, g] of Object.entries(touched)) {
-            const old = tAtt.find((x) => x.id === id);
+            const old = await fresh('teacherAttendance', id, tAtt.find((x) => x.id === id));
             const records = { ...((old && old.records) || {}) };
             const planned = Number(U.slotFor(g.c, g.d).periods) || Number(g.c.periods) || 0;
             g.items.forEach((p) => { records[p.tid] = p.v === 'V' ? { present: false, periods: 0, planned } : { present: p.v > 0, periods: p.v, planned }; });
@@ -1032,9 +1034,10 @@
           });
           if (!n) { U.toast('Không có thay đổi nào để lưu.', 'ok'); btn.disabled = false; return; }
           for (const [id, g] of Object.entries(touched)) {
-            const old = tAtt.find((z) => z.id === id);
+            const old = await fresh('teacherAttendance', id, tAtt.find((z) => z.id === id));
             const records = { ...((old && old.records) || {}) };
-            g.items.forEach((x) => { records[tid] = x.on ? { present: true, periods: x.planned, planned: x.planned, note: x.note } : { present: false, periods: 0, planned: x.planned, note: x.note || 'Nghỉ' }; });
+            const prevNote = (records[tid] && records[tid].note) || '';
+            g.items.forEach((x) => { records[tid] = x.on ? { present: true, periods: x.planned, planned: x.planned, note: '' } : { present: false, periods: 0, planned: x.planned, note: prevNote }; });
             const data = { classId: g.c.id, teacherId: g.c.teacherId || '', teacherIds: U.classTeachers(g.c), date: g.d, records, updatedBy: App.me.name };
             await DB.save('teacherAttendance', id, data, true);
             tAtt = tAtt.filter((z) => z.id !== id).concat([{ id, ...data }]);

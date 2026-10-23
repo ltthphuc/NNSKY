@@ -745,7 +745,7 @@
     const list = App.teachers;
     root.innerHTML = `${head('Giáo viên', 'Tạo tài khoản giáo viên, mở hồ sơ để phân công lớp (dạy chính / trợ giảng) và điểm danh nhanh theo ngày, theo tuần.', `<button class="btn" id="add">${icon('plus')} Thêm giáo viên</button>`)}
       <div class="card"><div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th>Giáo viên</th><th>Email đăng nhập</th><th>Số điện thoại</th><th>Lớp phụ trách</th><th class="right">Đơn giá/tiết</th><th>Trạng thái</th><th></th></tr></thead><tbody>
-      ${list.map((t) => `<tr><td class="name"><div class="row" style="flex-wrap:nowrap"><div class="avatar">${esc(U.initials(t.name))}</div>${esc(t.name)}</div></td><td>${esc(t.email)}</td><td class="mono">${esc(t.phone || '')}</td>
+      ${list.map((t) => `<tr><td class="name"><div class="row" style="flex-wrap:nowrap"><div class="avatar">${esc(U.initials(t.name))}</div><a href="#/staff/${t.id}">${esc(t.name)}</a></div></td><td>${esc(t.email)}</td><td class="mono">${esc(t.phone || '')}</td>
         <td>${App.classes.filter((c) => U.classTeachers(c).includes(t.id)).map((c) => `<span class="badge ${c.teacherId === t.id ? 'blue' : ''}" title="${U.roleName(U.roleOf(c, t.id))}">${esc(c.name)}${c.teacherId === t.id ? '' : ' (TG)'}</span>`).join(' ') || '<span class="muted">Chưa có</span>'}</td>
         <td class="right small mono">Chính: ${money(t.rateMain)}<br>Trợ giảng: ${money(t.rateAssistant)}</td>
         <td>${t.active === false ? '<span class="badge err">Đã khóa</span>' : '<span class="badge ok">Hoạt động</span>'}</td>
@@ -875,7 +875,7 @@
     if (!admin && tid !== App.me.uid) { root.innerHTML = `<div class="card">${empty('teachers', 'Bạn chỉ xem được hồ sơ của chính mình', '')}</div>`; return; }
     const teacher = App.teachers.find((x) => x.id === tid);
     if (!teacher) { root.innerHTML = `${head('Không tìm thấy giáo viên')}<div class="card">${empty('teachers', 'Giáo viên không tồn tại', '<a href="#/staff">Quay lại danh sách</a>')}</div>`; return; }
-    const st = (App.staffState = App.staffState || { mode: 'week', ref: U.today(), month: U.today().slice(0, 7) });
+    const st = (App.staffState = App.staffState || { mode: 'month', ref: U.today(), month: U.today().slice(0, 7) });
     let tAtt = [], cells = {};
     const today = U.today();
     const mine = () => App.classes.filter((c) => U.classTeachers(c).includes(tid) && c.status !== 'closed');
@@ -883,6 +883,7 @@
 
     const period = () => {
       if (st.mode === 'day') return [st.ref];
+      if (st.mode === 'month') { const [from, to] = U.monthRange(st.ref.slice(0, 7)); const out = []; for (let d = U.parse(from); U.ymd(d) <= to; d.setDate(d.getDate() + 1)) out.push(U.ymd(d)); return out; }
       const d = U.parse(st.ref); const dow = (d.getDay() + 6) % 7;
       return Array.from({ length: 7 }, (_, i) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow + i); return U.ymd(x); });
     };
@@ -906,7 +907,7 @@
       return { dates, rows };
     };
 
-    const periodLabel = (dates) => (st.mode === 'day' ? `${U.dayName(U.parse(dates[0]).getDay())}, ${U.fmtDate(dates[0])}` : `Tuần ${U.fmtDate(dates[0])} - ${U.fmtDate(dates[6])}`);
+    const periodLabel = (dates) => (st.mode === 'day' ? `${U.dayName(U.parse(dates[0]).getDay())}, ${U.fmtDate(dates[0])}` : st.mode === 'month' ? U.monthLabel(st.ref.slice(0, 7)) : `Tuần ${U.fmtDate(dates[0])} - ${U.fmtDate(dates[6])}`);
     const classesTable = () => {
       const own = mine();
       const assignable = App.openClasses().filter((c) => !U.classTeachers(c).includes(tid));
@@ -922,18 +923,23 @@
     };
     const quickCard = () => {
       const { dates, rows } = buildCells();
-      const head1 = dates.map((d) => `<th class="center"><button type="button" class="colbtn" data-col="${d}" title="Chọn / bỏ cả ngày này cho mọi lớp">${U.dayShort(U.parse(d).getDay())}<br><small>${U.shortDate(d)}</small></button></th>`).join('');
-      const body = rows.map((r) => `<tr><td class="name"><button type="button" class="colbtn left" data-row="${r.c.id}" title="Chọn / bỏ cả lớp này cho mọi ngày">${esc(r.c.name)}</button><div class="small muted">${U.roleName(U.roleOf(r.c, tid))}</div></td>
-        ${r.cols.map((x) => (x ? `<td class="center"><label class="qa ${x.future ? 'future' : ''}" title="${x.future ? 'Chưa đến ngày dạy' : U.timeText(U.slotFor(x.c, x.d)) + ' · ' + x.planned + ' tiết'}"><input type="checkbox" data-cell="${x.key}" ${x.on ? 'checked' : ''} ${x.future ? 'disabled' : ''}><span class="box">${icon('check', 16)}</span>${x.orig === 'part' ? `<small class="partial" title="Đã nghỉ một phần: ${x.planned - x.taught} tiết">½</small>` : ''}${x.orig === 'new' ? '' : '<i class="rec-dot"></i>'}</label></td>` : '<td class="center muted">–</td>')).join('')}</tr>`).join('');
+      const usedDates = dates.filter((d, i) => rows.some((r) => r.cols[i]));
+      const dayBtns = usedDates.map((d) => `<button type="button" class="colbtn" data-col="${d}" title="Chọn / bỏ cả ngày này cho mọi lớp">${U.dayShort(U.parse(d).getDay())} <small>${U.shortDate(d)}</small></button>`).join('');
+      const cards = rows.map((r) => {
+        const list = r.cols.filter(Boolean);
+        return `<div class="qclass"><div class="qc-h"><div class="grow"><b>${esc(r.c.name)}</b> <span class="badge ${U.roleOf(r.c, tid) === 'main' ? 'blue' : ''}">${U.roleName(U.roleOf(r.c, tid))}</span> <span class="small muted">${esc(U.scheduleText(r.c))}</span></div>
+            <span class="small" data-cnt="${r.c.id}"></span><button type="button" class="btn sm ghost" data-row="${r.c.id}" title="Chọn / bỏ tất cả các ngày của lớp này">Chọn / bỏ cả lớp</button></div>
+          <div class="qchips">${list.map((x) => `<label class="qchip ${x.future ? 'future' : ''}" title="${x.future ? 'Chưa đến ngày dạy' : esc(U.timeText(U.slotFor(x.c, x.d))) + ' · ' + x.planned + ' tiết'}"><input type="checkbox" data-cell="${x.key}" ${x.on ? 'checked' : ''} ${x.future ? 'disabled' : ''}><span class="qc"><b>${U.dayShort(U.parse(x.d).getDay())}</b><small>${U.shortDate(x.d)}</small>${x.orig === 'part' ? `<i title="Đã nghỉ một phần: ${x.planned - x.taught} tiết">½</i>` : ''}${x.orig === 'new' ? '' : '<em></em>'}</span></label>`).join('')}</div></div>`;
+      }).join('');
       return `<div class="card mt"><div class="card-h"><h3>Điểm danh nhanh</h3><div class="grow"></div>
-          <div class="seg"><button class="${st.mode === 'week' ? 'on' : ''}" data-mode="week">Theo tuần</button><button class="${st.mode === 'day' ? 'on' : ''}" data-mode="day">Theo ngày</button></div></div>
+          <div class="seg"><button class="${st.mode === 'month' ? 'on' : ''}" data-mode="month">Theo tháng</button><button class="${st.mode === 'week' ? 'on' : ''}" data-mode="week">Theo tuần</button><button class="${st.mode === 'day' ? 'on' : ''}" data-mode="day">Theo ngày</button></div></div>
         <div class="toolbar" style="margin:0;border-bottom:1px solid var(--line);border-radius:0">
           <button class="icon-btn" id="qprev">${icon('left')}</button>
           ${st.mode === 'day' ? `<input class="input" type="date" id="qref" value="${esc(st.ref)}" style="width:auto">` : `<b>${esc(periodLabel(dates))}</b>`}
-          <button class="icon-btn" id="qnext">${icon('right')}</button><button class="btn sm ghost" id="qtoday">${st.mode === 'day' ? 'Hôm nay' : 'Tuần này'}</button>
-          <div class="grow"></div><button class="btn sm soft" id="qall">${icon('check', 15)} Chọn tất cả (dạy đủ)</button><button class="btn sm ghost" id="qnone">Bỏ chọn tất cả (nghỉ)</button></div>
-        <div class="card-b">${rows.length ? `<div class="table-wrap"><table class="t qa-grid"><thead><tr><th>Lớp</th>${head1}</tr></thead><tbody>${body}</tbody></table></div>
-          <div class="hint" style="margin-top:10px">Tick = dạy đủ buổi, bỏ tick = nghỉ cả buổi (bị trừ lương). Bấm tên ngày để chọn/bỏ cả ngày cho mọi lớp, bấm tên lớp để chọn/bỏ cả lớp. Chấm xanh = đã lưu trước đó; "½" = đã nghỉ một số tiết (sửa chi tiết trong trang của lớp). Ngày chưa tới không chọn được.</div>
+          <button class="icon-btn" id="qnext">${icon('right')}</button><button class="btn sm ghost" id="qtoday">${st.mode === 'day' ? 'Hôm nay' : st.mode === 'week' ? 'Tuần này' : 'Tháng này'}</button>
+          <div class="grow"></div><button class="btn sm soft" id="qall">${icon('check', 15)} Chọn tất cả (lên lớp)</button><button class="btn sm ghost" id="qnone">Bỏ chọn tất cả (nghỉ)</button></div>
+        <div class="card-b">${rows.length ? `${usedDates.length > 1 ? `<div class="daystrip"><span class="small muted">Chọn / bỏ nhanh một ngày cho tất cả lớp:</span>${dayBtns}</div>` : ''}${cards}
+          <div class="hint">Mỗi lớp hiện các ngày lớp đó có buổi học. <b>Ô xanh = giáo viên đã lên lớp</b>, <b>ô trắng = nghỉ cả buổi</b> (bị trừ lương). Chấm xanh nhỏ = đã lưu trước đó, "½" = đã nghỉ một số tiết (sửa chi tiết trong tab Điểm danh của lớp). Ngày chưa tới không chọn được.</div>
           <div class="row mt"><button class="btn ok" id="qsave">${icon('check')} Lưu điểm danh giáo viên</button></div>` : empty('calendar', 'Không có buổi dạy nào trong khoảng này', 'Giáo viên chưa được phân công lớp, hoặc các lớp không có lịch học ở thời gian đã chọn.')}</div></div>`;
     };
     const paySummary = () => {
@@ -951,16 +957,28 @@
       root.innerHTML = `<div class="page-head"><div>${admin ? `<a href="#/staff" class="small">${icon('back', 14)} Danh sách giáo viên</a>` : ''}
           <h1 style="margin-top:6px">${esc(teacher.name)}</h1><p>${esc(teacher.email || '')}${teacher.phone ? ' · ' + esc(teacher.phone) : ''}</p></div></div>
         ${classesTable()}${quickCard()}${paySummary()}`;
+      counts();
     };
 
     const toggleCells = (pred, on) => { Object.values(cells).forEach((x) => { if (!x.future && pred(x)) x.on = on; }); };
-    const sync = () => root.querySelectorAll('[data-cell]').forEach((i) => { i.checked = cells[i.dataset.cell].on; });
+    const sync = () => { root.querySelectorAll('[data-cell]').forEach((i) => { i.checked = cells[i.dataset.cell].on; }); counts(); };
     const flip = (pred) => { const list = Object.values(cells).filter((x) => !x.future && pred(x)); if (!list.length) return; const on = list.some((x) => !x.on); list.forEach((x) => { x.on = on; }); sync(); };
-    const shift = (n) => { const d = U.parse(st.ref); d.setDate(d.getDate() + (st.mode === 'day' ? n : 7 * n)); st.ref = U.ymd(d); render(); };
+    const shift = (n) => {
+      if (st.mode === 'month') { st.ref = U.addMonth(st.ref.slice(0, 7), n) + '-01'; if (st.ref.slice(0, 7) === today.slice(0, 7)) st.ref = today; } else { const d = U.parse(st.ref); d.setDate(d.getDate() + (st.mode === 'day' ? n : 7 * n)); st.ref = U.ymd(d); }
+      render();
+    };
+    const counts = () => {
+      root.querySelectorAll('[data-cnt]').forEach((el) => {
+        const list = Object.values(cells).filter((x) => x.c.id === el.dataset.cnt && !x.future);
+        const on = list.filter((x) => x.on).length;
+        el.textContent = list.length ? `Lên lớp ${on}/${list.length} buổi${list.length - on ? ' · nghỉ ' + (list.length - on) : ''}` : '';
+        el.className = 'small ' + (list.length - on ? 'qc-off' : 'muted');
+      });
+    };
 
     root.onchange = async (e) => {
       const t = e.target;
-      if (t.dataset.cell) { cells[t.dataset.cell].on = t.checked; return; }
+      if (t.dataset.cell) { cells[t.dataset.cell].on = t.checked; counts(); return; }
       if (t.id === 'qref') { if (t.value) { st.ref = t.value; render(); } return; }
       if (t.dataset.role && admin) {
         const c = App.classById(t.dataset.role);

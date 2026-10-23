@@ -458,3 +458,21 @@ table.t { width: 100%; border-collapse: collapse; }
 .qa.future { opacity: .45; cursor: not-allowed; }
 .qa .partial { position: absolute; right: -8px; top: -8px; background: var(--warn); color: #fff; border-radius: 99px; font-size: 10px; padding: 0 5px; }
 .qa .rec-dot { position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--sky); border: 2px solid #fff; }
+
+/* ===== Điểm danh nhanh giáo viên: thẻ lớp + các ngày ===== */
+.daystrip { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 10px 12px; margin-bottom: 14px; background: #f8fafd; border: 1px dashed var(--line); border-radius: 12px; }
+.daystrip .colbtn { background: #fff; border: 1px solid var(--line); }
+.qclass { border: 1px solid var(--line); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+.qc-h { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 12px 14px; background: #f8fafd; border-bottom: 1px solid var(--line); }
+.qc-off { color: var(--err); font-weight: 600; }
+.qchips { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px; }
+.qchip { cursor: pointer; }
+.qchip input { display: none; }
+.qchip .qc { position: relative; display: grid; place-items: center; min-width: 66px; padding: 8px 10px; border: 2px solid #d3dcea; border-radius: 12px; background: #fff; color: var(--muted); line-height: 1.2; transition: all .12s; }
+.qchip .qc b { font-size: 14px; color: var(--ink); }
+.qchip .qc small { font-size: 12px; }
+.qchip input:checked + .qc { background: var(--ok); border-color: var(--ok); color: #d6f5e3; }
+.qchip input:checked + .qc b { color: #fff; }
+.qchip.future { opacity: .45; cursor: not-allowed; }
+.qchip .qc i { position: absolute; right: -7px; top: -8px; background: var(--warn); color: #fff; border-radius: 99px; font-size: 10px; padding: 0 5px; font-style: normal; }
+.qchip .qc em { position: absolute; left: -4px; top: -4px; width: 9px; height: 9px; border-radius: 50%; background: var(--sky); border: 2px solid #fff; }

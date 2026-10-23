@@ -743,13 +743,13 @@
    * =================================================================== */
   Views.teachers = async (root, params = {}) => {
     const list = App.teachers;
-    root.innerHTML = `${head('Giáo viên', 'Tạo tài khoản đăng nhập cho giáo viên. Mỗi giáo viên chỉ thấy các lớp được phân công.', `<button class="btn" id="add">${icon('plus')} Thêm giáo viên</button>`)}
+    root.innerHTML = `${head('Giáo viên', 'Tạo tài khoản giáo viên, mở hồ sơ để phân công lớp (dạy chính / trợ giảng) và điểm danh nhanh theo ngày, theo tuần.', `<button class="btn" id="add">${icon('plus')} Thêm giáo viên</button>`)}
       <div class="card"><div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th>Giáo viên</th><th>Email đăng nhập</th><th>Số điện thoại</th><th>Lớp phụ trách</th><th class="right">Đơn giá/tiết</th><th>Trạng thái</th><th></th></tr></thead><tbody>
       ${list.map((t) => `<tr><td class="name"><div class="row" style="flex-wrap:nowrap"><div class="avatar">${esc(U.initials(t.name))}</div>${esc(t.name)}</div></td><td>${esc(t.email)}</td><td class="mono">${esc(t.phone || '')}</td>
         <td>${App.classes.filter((c) => U.classTeachers(c).includes(t.id)).map((c) => `<span class="badge ${c.teacherId === t.id ? 'blue' : ''}" title="${U.roleName(U.roleOf(c, t.id))}">${esc(c.name)}${c.teacherId === t.id ? '' : ' (TG)'}</span>`).join(' ') || '<span class="muted">Chưa có</span>'}</td>
         <td class="right small mono">Chính: ${money(t.rateMain)}<br>Trợ giảng: ${money(t.rateAssistant)}</td>
         <td>${t.active === false ? '<span class="badge err">Đã khóa</span>' : '<span class="badge ok">Hoạt động</span>'}</td>
-        <td class="nowrap right"><button class="icon-btn" data-edit="${t.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn" data-reset="${t.id}" title="Gửi email đặt lại mật khẩu">${icon('key')}</button></td></tr>`).join('')}
+        <td class="nowrap right"><a class="btn sm soft" href="#/staff/${t.id}">${icon('classes', 15)} Phân công & chấm công</a> <button class="icon-btn" data-edit="${t.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn" data-reset="${t.id}" title="Gửi email đặt lại mật khẩu">${icon('key')}</button></td></tr>`).join('')}
       </tbody></table>` : empty('teachers', 'Chưa có giáo viên', 'Bấm "Thêm giáo viên" để tạo tài khoản.')}</div></div>`;
 
     const form = (t) => `<div class="form-grid"><div class="full"><label class="f">Họ và tên *</label><input class="input" id="n" value="${esc(t ? t.name : '')}"></div>
@@ -849,6 +849,186 @@
         }
       } catch (er) { U.toast(er.message, 'err'); draw(); }
     };
+  };
+
+
+  /* ===================================================================
+   *  GIÁO VIÊN: phân công lớp + điểm danh nhanh theo ngày / theo tuần
+   * =================================================================== */
+  const setClassTeachers = async (c, patch) => {
+    const next = { ...c, ...patch };
+    next.teacherIds = U.classTeachers(next);
+    await DB.save('classes', c.id, { ...patch, teacherIds: next.teacherIds });
+    if (U.classTeachers(c).join() !== next.teacherIds.join()) {
+      for (const col of ['students', 'attendance', 'assessments', 'payments', 'teacherAttendance']) {
+        const list = await DB.list(col, [['classId', '==', c.id]]);
+        await DB.updateMany(col, list.map((x) => x.id), { teacherId: next.teacherId || '', teacherIds: next.teacherIds });
+      }
+    }
+    await App.refreshClasses();
+  };
+
+  Views.staff = async (root, params = {}) => {
+    const admin = DB.isAdmin();
+    if (!params.id && admin) return Views.teachers(root, params);
+    const tid = params.id || App.me.uid;
+    if (!admin && tid !== App.me.uid) { root.innerHTML = `<div class="card">${empty('teachers', 'Bạn chỉ xem được hồ sơ của chính mình', '')}</div>`; return; }
+    const teacher = App.teachers.find((x) => x.id === tid);
+    if (!teacher) { root.innerHTML = `${head('Không tìm thấy giáo viên')}<div class="card">${empty('teachers', 'Giáo viên không tồn tại', '<a href="#/staff">Quay lại danh sách</a>')}</div>`; return; }
+    const st = (App.staffState = App.staffState || { mode: 'week', ref: U.today(), month: U.today().slice(0, 7) });
+    let tAtt = [], cells = {};
+    const today = U.today();
+    const mine = () => App.classes.filter((c) => U.classTeachers(c).includes(tid) && c.status !== 'closed');
+    const loadAtt = async () => { tAtt = await DB.q('teacherAttendance'); };
+
+    const period = () => {
+      if (st.mode === 'day') return [st.ref];
+      const d = U.parse(st.ref); const dow = (d.getDay() + 6) % 7;
+      return Array.from({ length: 7 }, (_, i) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow + i); return U.ymd(x); });
+    };
+    const buildCells = () => {
+      cells = {};
+      const dates = period();
+      const rows = mine().map((c) => {
+        const row = { c, cols: dates.map((d) => {
+          if (!U.sessions(c, d, d).length) return null;
+          const planned = Number(U.slotFor(c, d).periods) || Number(c.periods) || 0;
+          const doc = tAtt.find((x) => x.classId === c.id && x.date === d);
+          const rec = doc && doc.records && doc.records[tid];
+          const taught = rec && rec.present ? Number(rec.periods) || 0 : 0;
+          const orig = !rec ? 'new' : !rec.present ? 'none' : taught < planned ? 'part' : 'full';
+          const cell = { key: `${c.id}|${d}`, c, d, planned, orig, taught, note: (rec && rec.note) || '', on: orig !== 'none', future: d > today };
+          cells[cell.key] = cell;
+          return cell;
+        }) };
+        return row;
+      }).filter((r) => r.cols.some(Boolean));
+      return { dates, rows };
+    };
+
+    const periodLabel = (dates) => (st.mode === 'day' ? `${U.dayName(U.parse(dates[0]).getDay())}, ${U.fmtDate(dates[0])}` : `Tuần ${U.fmtDate(dates[0])} - ${U.fmtDate(dates[6])}`);
+    const classesTable = () => {
+      const own = mine();
+      const assignable = App.openClasses().filter((c) => !U.classTeachers(c).includes(tid));
+      return `<div class="card"><div class="card-h"><h3>Lớp được phân công</h3><span class="small muted">${own.length} lớp</span></div>
+        <div class="table-wrap">${own.length ? `<table class="t"><thead><tr><th>Lớp</th><th>Lịch học</th><th>Vai trò</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
+          ${own.map((c) => `<tr><td class="name"><a href="#/classes/${c.id}?tab=attendance">${esc(c.name)}</a><div class="small muted">${esc(c.code)}</div></td><td class="small">${esc(U.scheduleText(c))}</td>
+            <td>${admin ? `<select class="select" data-role="${c.id}" style="min-width:150px"><option value="main" ${c.teacherId === tid ? 'selected' : ''}>Giáo viên chính</option><option value="assistant" ${c.teacherId === tid ? '' : 'selected'}>Trợ giảng</option></select>` : `<span class="badge ${c.teacherId === tid ? 'blue' : ''}">${U.roleName(U.roleOf(c, tid))}</span>`}</td>
+            ${admin ? `<td class="right"><button class="icon-btn danger" data-unassign="${c.id}" title="Bỏ phân công lớp này">${icon('trash')}</button></td>` : ''}</tr>`).join('')}</tbody></table>` : empty('classes', 'Chưa được phân công lớp nào', admin ? 'Chọn lớp bên dưới để phân công.' : 'Quản trị viên chưa phân công lớp cho bạn.')}</div>
+        ${admin ? `<div class="card-b" style="border-top:1px solid var(--line)"><label class="f">Phân công thêm vào lớp đã có</label>
+          <div class="row"><select class="select" id="addcls" style="min-width:240px;flex:1">${assignable.length ? assignable.map((c) => `<option value="${c.id}">${esc(c.name)} · ${esc(c.code)} · ${esc(U.scheduleText(c))}</option>`).join('') : '<option value="">(Đã phân công vào mọi lớp đang mở)</option>'}</select>
+          <select class="select" id="addrole" style="width:auto"><option value="main">Dạy chính</option><option value="assistant">Trợ giảng</option></select>
+          <button class="btn" id="addbtn" ${assignable.length ? '' : 'disabled'}>${icon('plus')} Phân công</button></div></div>` : ''}</div>`;
+    };
+    const quickCard = () => {
+      const { dates, rows } = buildCells();
+      const head1 = dates.map((d) => `<th class="center"><button type="button" class="colbtn" data-col="${d}" title="Chọn / bỏ cả ngày này cho mọi lớp">${U.dayShort(U.parse(d).getDay())}<br><small>${U.shortDate(d)}</small></button></th>`).join('');
+      const body = rows.map((r) => `<tr><td class="name"><button type="button" class="colbtn left" data-row="${r.c.id}" title="Chọn / bỏ cả lớp này cho mọi ngày">${esc(r.c.name)}</button><div class="small muted">${U.roleName(U.roleOf(r.c, tid))}</div></td>
+        ${r.cols.map((x) => (x ? `<td class="center"><label class="qa ${x.future ? 'future' : ''}" title="${x.future ? 'Chưa đến ngày dạy' : U.timeText(U.slotFor(x.c, x.d)) + ' · ' + x.planned + ' tiết'}"><input type="checkbox" data-cell="${x.key}" ${x.on ? 'checked' : ''} ${x.future ? 'disabled' : ''}><span class="box">${icon('check', 16)}</span>${x.orig === 'part' ? `<small class="partial" title="Đã nghỉ một phần: ${x.planned - x.taught} tiết">½</small>` : ''}${x.orig === 'new' ? '' : '<i class="rec-dot"></i>'}</label></td>` : '<td class="center muted">–</td>')).join('')}</tr>`).join('');
+      return `<div class="card mt"><div class="card-h"><h3>Điểm danh nhanh</h3><div class="grow"></div>
+          <div class="seg"><button class="${st.mode === 'week' ? 'on' : ''}" data-mode="week">Theo tuần</button><button class="${st.mode === 'day' ? 'on' : ''}" data-mode="day">Theo ngày</button></div></div>
+        <div class="toolbar" style="margin:0;border-bottom:1px solid var(--line);border-radius:0">
+          <button class="icon-btn" id="qprev">${icon('left')}</button>
+          ${st.mode === 'day' ? `<input class="input" type="date" id="qref" value="${esc(st.ref)}" style="width:auto">` : `<b>${esc(periodLabel(dates))}</b>`}
+          <button class="icon-btn" id="qnext">${icon('right')}</button><button class="btn sm ghost" id="qtoday">${st.mode === 'day' ? 'Hôm nay' : 'Tuần này'}</button>
+          <div class="grow"></div><button class="btn sm soft" id="qall">${icon('check', 15)} Chọn tất cả (dạy đủ)</button><button class="btn sm ghost" id="qnone">Bỏ chọn tất cả (nghỉ)</button></div>
+        <div class="card-b">${rows.length ? `<div class="table-wrap"><table class="t qa-grid"><thead><tr><th>Lớp</th>${head1}</tr></thead><tbody>${body}</tbody></table></div>
+          <div class="hint" style="margin-top:10px">Tick = dạy đủ buổi, bỏ tick = nghỉ cả buổi (bị trừ lương). Bấm tên ngày để chọn/bỏ cả ngày cho mọi lớp, bấm tên lớp để chọn/bỏ cả lớp. Chấm xanh = đã lưu trước đó; "½" = đã nghỉ một số tiết (sửa chi tiết trong trang của lớp). Ngày chưa tới không chọn được.</div>
+          <div class="row mt"><button class="btn ok" id="qsave">${icon('check')} Lưu điểm danh giáo viên</button></div>` : empty('calendar', 'Không có buổi dạy nào trong khoảng này', 'Giáo viên chưa được phân công lớp, hoặc các lớp không có lịch học ở thời gian đã chọn.')}</div></div>`;
+    };
+    const paySummary = () => {
+      const rows = U.payrollRows({ classes: App.classes, tAtt, teachers: App.teachers, month: st.month }).filter((r) => r.teacher.id === tid);
+      const r = rows[0] || { sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0 };
+      return `<div class="card mt"><div class="card-h"><h3>Công và lương ${U.monthLabel(st.month).toLowerCase()}</h3><div class="grow"></div>${monthNav(st.month)}</div>
+        <div class="card-b"><div class="stats" style="margin:0">
+          <div class="card stat"><div class="ico">${icon('wallet', 24)}</div><div><b>${money(r.amount)}</b><span>Thực nhận</span></div></div>
+          <div class="card stat"><div class="ico g">${icon('calendar', 24)}</div><div><b>${r.periods}/${r.planned}</b><span>Tiết đã dạy / theo lịch</span></div></div>
+          <div class="card stat"><div class="ico o">${icon('clock', 24)}</div><div><b>${r.absent}</b><span>Buổi nghỉ cả buổi (+${r.partial} nghỉ một phần)</span></div></div>
+          <div class="card stat"><div class="ico s">${icon('attendance', 24)}</div><div><b>${money(r.deduct)}</b><span>Trừ do nghỉ (${r.off} tiết)</span></div></div></div>
+          <div class="small muted" style="margin-top:10px">Đơn giá: ${money(teacher.rateMain)}/tiết khi dạy chính, ${money(teacher.rateAssistant)}/tiết khi trợ giảng.${admin ? ' <a href="#/payroll">Xem bảng lương tất cả giáo viên</a>' : ''}</div></div></div>`;
+    };
+    const render = () => {
+      root.innerHTML = `<div class="page-head"><div>${admin ? `<a href="#/staff" class="small">${icon('back', 14)} Danh sách giáo viên</a>` : ''}
+          <h1 style="margin-top:6px">${esc(teacher.name)}</h1><p>${esc(teacher.email || '')}${teacher.phone ? ' · ' + esc(teacher.phone) : ''}</p></div></div>
+        ${classesTable()}${quickCard()}${paySummary()}`;
+    };
+
+    const toggleCells = (pred, on) => { Object.values(cells).forEach((x) => { if (!x.future && pred(x)) x.on = on; }); };
+    const sync = () => root.querySelectorAll('[data-cell]').forEach((i) => { i.checked = cells[i.dataset.cell].on; });
+    const flip = (pred) => { const list = Object.values(cells).filter((x) => !x.future && pred(x)); if (!list.length) return; const on = list.some((x) => !x.on); list.forEach((x) => { x.on = on; }); sync(); };
+    const shift = (n) => { const d = U.parse(st.ref); d.setDate(d.getDate() + (st.mode === 'day' ? n : 7 * n)); st.ref = U.ymd(d); render(); };
+
+    root.onchange = async (e) => {
+      const t = e.target;
+      if (t.dataset.cell) { cells[t.dataset.cell].on = t.checked; return; }
+      if (t.id === 'qref') { if (t.value) { st.ref = t.value; render(); } return; }
+      if (t.dataset.role && admin) {
+        const c = App.classById(t.dataset.role);
+        const role = t.value;
+        const patch = role === 'main' ? { teacherId: tid, assistantId: c.assistantId === tid ? '' : c.assistantId } : { assistantId: tid, teacherId: c.teacherId === tid ? '' : c.teacherId };
+        const other = role === 'main' ? c.teacherId : c.assistantId;
+        if (other && other !== tid && !(await U.confirm(`${esc(App.teacherName(other))} đang là ${role === 'main' ? 'giáo viên chính' : 'trợ giảng'} của ${esc(c.name)}. Thay bằng ${esc(teacher.name)}?`, 'Thay thế', false))) { render(); return; }
+        try { await setClassTeachers(c, patch); U.toast('Đã cập nhật vai trò', 'ok'); } catch (er) { U.toast(er.message, 'err'); }
+        render();
+      }
+    };
+    root.onclick = async (e) => {
+      const t = e.target;
+      const col = t.closest('[data-col]'), row = t.closest('[data-row]'), mode = t.closest('[data-mode]');
+      if (mode) { st.mode = mode.dataset.mode; render(); return; }
+      if (col) return flip((x) => x.d === col.dataset.col);
+      if (row) return flip((x) => x.c.id === row.dataset.row);
+      if (t.closest('#qprev')) return shift(-1);
+      if (t.closest('#qnext')) return shift(1);
+      if (t.closest('#qtoday')) { st.ref = today; render(); return; }
+      if (t.closest('#qall')) { toggleCells(() => true, true); sync(); return; }
+      if (t.closest('#qnone')) { toggleCells(() => true, false); sync(); return; }
+      if (t.closest('[data-mprev]')) { st.month = U.addMonth(st.month, -1); render(); return; }
+      if (t.closest('[data-mnext]')) { st.month = U.addMonth(st.month, 1); render(); return; }
+      const un = t.closest('[data-unassign]');
+      if (un && admin) {
+        const c = App.classById(un.dataset.unassign);
+        if (!(await U.confirm(`Bỏ phân công <b>${esc(teacher.name)}</b> khỏi lớp <b>${esc(c.name)}</b>? Dữ liệu chấm công cũ vẫn được giữ.`, 'Bỏ phân công'))) return;
+        try { await setClassTeachers(c, c.teacherId === tid ? { teacherId: '' } : { assistantId: '' }); U.toast('Đã bỏ phân công', 'ok'); } catch (er) { U.toast(er.message, 'err'); }
+        render(); return;
+      }
+      if (t.closest('#addbtn') && admin) {
+        const c = App.classById(root.querySelector('#addcls').value), role = root.querySelector('#addrole').value;
+        if (!c) return;
+        const other = role === 'main' ? c.teacherId : c.assistantId;
+        if (other && !(await U.confirm(`${esc(App.teacherName(other))} đang là ${role === 'main' ? 'giáo viên chính' : 'trợ giảng'} của ${esc(c.name)}. Thay bằng ${esc(teacher.name)}?`, 'Thay thế', false))) return;
+        try { await setClassTeachers(c, role === 'main' ? { teacherId: tid } : { assistantId: tid }); U.toast(`Đã phân công ${teacher.name} vào ${c.name}`, 'ok'); } catch (er) { U.toast(er.message, 'err'); }
+        render(); return;
+      }
+      if (t.closest('#qsave')) {
+        const btn = t.closest('#qsave'); btn.disabled = true;
+        try {
+          const touched = {};
+          let n = 0;
+          Object.values(cells).forEach((x) => {
+            if (x.future) return;
+            const changed = x.orig === 'new' ? true : x.orig === 'none' ? x.on : (x.orig === 'part' ? !x.on : !x.on);
+            if (!changed) return;
+            const g = (touched[`${x.c.id}_${x.d}`] = touched[`${x.c.id}_${x.d}`] || { c: x.c, d: x.d, items: [] });
+            g.items.push(x); n++;
+          });
+          if (!n) { U.toast('Không có thay đổi nào để lưu.', 'ok'); btn.disabled = false; return; }
+          for (const [id, g] of Object.entries(touched)) {
+            const old = tAtt.find((z) => z.id === id);
+            const records = { ...((old && old.records) || {}) };
+            g.items.forEach((x) => { records[tid] = x.on ? { present: true, periods: x.planned, planned: x.planned, note: x.note } : { present: false, periods: 0, planned: x.planned, note: x.note || 'Nghỉ' }; });
+            const data = { classId: g.c.id, teacherId: g.c.teacherId || '', teacherIds: U.classTeachers(g.c), date: g.d, records, updatedBy: App.me.name };
+            await DB.save('teacherAttendance', id, data, true);
+            tAtt = tAtt.filter((z) => z.id !== id).concat([{ id, ...data }]);
+          }
+          U.toast(`Đã lưu điểm danh giáo viên (${n} buổi)`, 'ok');
+          render();
+        } catch (er) { U.toast(er.message, 'err'); btn.disabled = false; }
+      }
+    };
+
+    root.innerHTML = '<div class="loading"><div class="spinner"></div>Đang tải...</div>';
+    await loadAtt(); render();
   };
 
   /* ===================================================================

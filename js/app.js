@@ -29,12 +29,13 @@
     { name: 'attendance', label: 'Điểm danh', icon: 'attendance', group: 'Lớp học' },
     { name: 'assessments', label: 'Đánh giá & điểm', icon: 'star', group: 'Lớp học' },
     { name: 'tuition', label: 'Học phí', icon: 'wallet', group: 'Lớp học' },
-    { name: 'payroll', label: 'Công & lương GV', icon: 'clock' },
+    { name: 'staff', label: 'Giáo viên', labelT: 'Việc của tôi', icon: 'teachers' },
+    { name: 'payroll', label: 'Công & lương GV', icon: 'clock', admin: true },
     { name: 'assign', label: 'Phân công & đơn giá', icon: 'teachers', admin: true },
-    { name: 'teachers', label: 'Tài khoản giáo viên', icon: 'students', admin: true },
     { name: 'settings', label: 'Cài đặt', icon: 'settings', admin: true },
   ];
-  const navLink = (n) => `<a href="#/${n.name}" data-nav="${n.name}">${icon(n.icon)}${n.label}</a>`;
+  const navLabel = (n) => (!DB.isAdmin() && n.labelT) || n.label;
+  const navLink = (n) => `<a href="#/${n.name}" data-nav="${n.name}">${icon(n.icon)}${navLabel(n)}</a>`;
   const navHtml = (list) => {
     let html = '', open = false;
     for (const n of list) {
@@ -61,12 +62,13 @@
   App.render = async () => {
     if (!App.me) return;
     const { name, params } = parseHash();
+    if (name === 'teachers') { App.go('staff'); return; } // trang tài khoản giáo viên nay nằm trong mục Giáo viên
     if (name === 'students') { App.go('classes'); return; } // danh sách học sinh nay nằm trong từng lớp
     const item = NAV.find((n) => n.name === name && (!n.admin || DB.isAdmin())) || NAV[0];
     document.body.classList.remove('nav-open');
     document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.nav === item.name));
     const t = document.getElementById('page-title');
-    if (t) t.textContent = (item.group ? item.group + ' › ' : '') + item.label;
+    if (t) t.textContent = (item.group ? item.group + ' › ' : '') + navLabel(item);
     const old = document.getElementById('view');
     const view = document.createElement('main');
     view.className = 'content'; view.id = 'view';

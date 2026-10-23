@@ -440,3 +440,21 @@ table.t { width: 100%; border-collapse: collapse; }
 .tab:hover { background: #eef3fb; color: var(--ink); }
 .tab.on { color: var(--primary); border-bottom-color: var(--primary); }
 @media (max-width: 700px) { .tabs { flex-wrap: nowrap; overflow-x: auto; } .tab { white-space: nowrap; padding: 10px 12px; } }
+
+/* ===== Điểm danh nhanh giáo viên ===== */
+.seg { display: inline-flex; background: #eef2f9; border-radius: 10px; padding: 3px; }
+.seg button { border: none; background: none; padding: 6px 14px; border-radius: 8px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg button.on { background: #fff; color: var(--primary); box-shadow: 0 1px 3px rgba(16, 36, 70, .12); }
+.colbtn { border: none; background: none; font: inherit; font-weight: 700; color: var(--primary); cursor: pointer; padding: 4px 8px; border-radius: 8px; line-height: 1.2; }
+.colbtn small { font-weight: 500; color: var(--muted); }
+.colbtn:hover { background: var(--primary-l); }
+.colbtn.left { text-align: left; font-size: 14.5px; padding-left: 0; }
+.qa-grid th, .qa-grid td { text-align: center; }
+.qa-grid td:first-child, .qa-grid th:first-child { text-align: left; }
+.qa { position: relative; display: inline-flex; cursor: pointer; }
+.qa input { display: none; }
+.qa .box { width: 30px; height: 30px; border-radius: 9px; border: 2px solid #c5d1e5; display: grid; place-items: center; color: transparent; background: #fff; transition: all .12s; }
+.qa input:checked + .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+.qa.future { opacity: .45; cursor: not-allowed; }
+.qa .partial { position: absolute; right: -8px; top: -8px; background: var(--warn); color: #fff; border-radius: 99px; font-size: 10px; padding: 0 5px; }
+.qa .rec-dot { position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--sky); border: 2px solid #fff; }

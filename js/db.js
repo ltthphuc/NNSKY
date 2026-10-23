@@ -29,7 +29,7 @@
    *  CHẾ ĐỘ DÙNG THỬ (localStorage)
    * ===================================================================== */
   const Demo = (() => {
-    const KEY = 'sky_demo_v6', SKEY = 'sky_demo_session_v6';
+    const KEY = 'sky_demo_v7', SKEY = 'sky_demo_session_v7';
     let store = null, listener = null;
 
     function seed() {
@@ -86,8 +86,8 @@
           const records = {};
           Object.entries(s.students).filter(([, v]) => v.classId === id).forEach(([sid, v]) => { if (v.startDate && d < v.startDate) return; records[sid] = rnd() > 0.14; });
           s.attendance[`${id}_${d}`] = { classId: id, teacherId: t, teacherIds: tids, date: d, records, updatedBy: 'Dữ liệu mẫu' };
-          const tr = { [t]: { present: true, periods: 2 } };
-          if (ta) tr[ta] = { present: rnd() > 0.1, periods: 2 };
+          const tr = { [t]: { present: true, periods: rnd() > 0.9 ? 1 : 2, planned: 2 } };
+          if (ta) tr[ta] = { present: rnd() > 0.1, periods: 2, planned: 2 };
           s.teacherAttendance[`${id}_${d}`] = { classId: id, teacherId: t, teacherIds: tids, date: d, records: tr, updatedBy: 'Dữ liệu mẫu' };
         });
       });

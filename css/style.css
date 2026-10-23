@@ -420,3 +420,16 @@ table.t { width: 100%; border-collapse: collapse; }
   .slot-row .muted:not(label) { display: none; }
   .slot-row label { grid-column: 1; }
 }
+
+/* ===== Chấm công giáo viên theo ngày ===== */
+.dayclass { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+.dayclass .dc-h { padding: 10px 14px; background: #f8fafd; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tday-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid #edf1f8; }
+.tday-row:last-child { border-bottom: none; }
+.tday-row > .grow { min-width: 190px; }
+.tday-row .select { width: auto; min-width: 160px; }
+.tday-row [data-note] { flex: 1 1 200px; min-width: 160px; }
+@media (max-width: 700px) {
+  .tday-row .select, .tday-row [data-note] { width: 100%; flex: 1 1 100%; }
+  .tday-row [data-sum] { min-width: 0 !important; width: 100%; }
+}

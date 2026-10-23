@@ -73,6 +73,7 @@
   /* Tính công & lương giáo viên trong tháng từ bảng chấm công (teacherAttendance) */
   U.payrollRows = ({ classes, tAtt, teachers, month }) => {
     const byT = {};
+    const newRow = (t) => ({ teacher: t, sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0, lines: {}, missing: 0 });
     const today = U.today();
     const [from, to] = U.monthRange(month);
     for (const cls of classes) {
@@ -84,20 +85,21 @@
           const t = teachers.find((x) => x.id === tid) || { id: tid, name: '(đã xóa)' };
           const role = U.roleOf(cls, tid);
           const rate = Number(role === 'main' ? t.rateMain : t.rateAssistant) || 0;
-          const r = (byT[tid] = byT[tid] || { teacher: t, sessions: 0, absent: 0, periods: 0, amount: 0, lines: {}, missing: 0 });
+          const r = (byT[tid] = byT[tid] || newRow(t));
           const key = cls.id + '|' + role;
-          const ln = (r.lines[key] = r.lines[key] || { cls, role, rate, sessions: 0, periods: 0, amount: 0 });
-          if (rec && rec.present) {
-            const p = Number(rec.periods) || 0;
-            r.sessions++; r.periods += p; r.amount += p * rate;
-            ln.sessions++; ln.periods += p; ln.amount += p * rate;
-          } else r.absent++;
+          const ln = (r.lines[key] = r.lines[key] || { cls, role, rate, sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0 });
+          // số tiết theo lịch của buổi đó; nghỉ cả buổi hoặc nghỉ một số tiết đều bị trừ tiền
+          const planned = rec && rec.planned != null ? Number(rec.planned) : Number(U.slotFor(cls, d.date).periods) || Number(cls.periods) || 0;
+          const taught = rec && rec.present ? Number(rec.periods) || 0 : 0;
+          const off = Math.max(0, planned - taught);
+          if (rec && rec.present) { r.sessions++; ln.sessions++; if (off > 0) { r.partial++; ln.partial++; } } else { r.absent++; ln.absent++; }
+          [r, ln].forEach((x) => { x.periods += taught; x.amount += taught * rate; x.planned += planned; x.off += off; x.deduct += off * rate; x.gross += planned * rate; });
         }
       }
       for (const tid of U.classTeachers(cls)) {
         const t = teachers.find((x) => x.id === tid);
         if (!t) continue;
-        const r = (byT[tid] = byT[tid] || { teacher: t, sessions: 0, absent: 0, periods: 0, amount: 0, lines: {}, missing: 0 });
+        const r = (byT[tid] = byT[tid] || newRow(t));
         r.missing += missing;
       }
     }

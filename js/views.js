@@ -47,7 +47,7 @@ window.Views = window.Views || {};
           return `<div class="list-item"><div class="time">${esc(U.timeText(U.slotFor(c, today)))}</div>
             <div class="grow"><b>${esc(c.name)}</b> <span class="muted">· ${esc(c.code)}</span><div class="small muted">${esc(App.teacherName(c.teacherId))}</div></div>
             ${doc ? `<span class="badge ok">${icon('check', 14)} Đã điểm danh${abs ? ' · ' + abs + ' vắng' : ''}</span>` : '<span class="badge warn">Chưa điểm danh</span>'}
-            <a class="btn sm ${doc ? 'ghost' : ''}" href="#/attendance?class=${c.id}&date=${today}">${doc ? 'Xem' : 'Điểm danh'}</a></div>`;
+            <a class="btn sm ${doc ? 'ghost' : ''}" href="#/classes/${c.id}?tab=attendance&date=${today}">${doc ? 'Xem' : 'Điểm danh'}</a></div>`;
         }).join('')
       : empty('calendar', 'Hôm nay không có lớp nào học', 'Chọn mục Điểm danh để xem các buổi khác theo lịch.');
 
@@ -77,7 +77,7 @@ window.Views = window.Views || {};
    *  LỚP HỌC
    * =================================================================== */
   Views.classes = async (root, params = {}) => {
-    if (params.id) return classDetail(root, params.id);
+    if (params.id) return classDetail(root, params.id, params);
     const admin = DB.isAdmin();
     const students = await DB.q('students');
     const rowHtml = (c) => {
@@ -92,7 +92,7 @@ window.Views = window.Views || {};
         <td class="right mono">${money(c.fee)}<div class="small muted">${c.feeMode === 'attend' ? 'Theo buổi học' : 'Theo buổi nghỉ'}</div></td>
         <td class="center"><b>${n}</b></td>
         <td>${c.status === 'closed' ? '<span class="badge">Đã đóng</span>' : '<span class="badge ok">Đang mở</span>'}</td>
-        <td class="nowrap right"><a class="btn sm soft" href="#/classes/${c.id}">${icon('students', 15)} Học sinh</a> <button class="icon-btn" data-rep="${c.id}" title="Xuất báo cáo cả lớp">${icon('download')}</button>${admin ? `<button class="icon-btn" data-edit="${c.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn danger" data-del="${c.id}" title="Xóa">${icon('trash')}</button>` : ''}</td>
+        <td class="nowrap right"><a class="btn sm soft" href="#/classes/${c.id}">${icon('students', 15)} Học sinh</a> <a class="btn sm soft" href="#/classes/${c.id}?tab=attendance">${icon('attendance', 15)} Điểm danh</a> <button class="icon-btn" data-rep="${c.id}" title="Xuất báo cáo cả lớp">${icon('download')}</button>${admin ? `<button class="icon-btn" data-edit="${c.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn danger" data-del="${c.id}" title="Xóa">${icon('trash')}</button>` : ''}</td>
       </tr>`;
     };
     root.innerHTML = `${head('Lớp học', admin ? 'Tạo lớp theo học kỳ hoặc năm học, mỗi lớp có mã riêng.' : 'Các lớp bạn được phân công.', admin ? `<button class="btn" id="add">${icon('plus')} Tạo lớp mới</button>` : '')}
@@ -277,9 +277,28 @@ window.Views = window.Views || {};
   Views.students = async () => { App.go('classes'); };
 
   /* Trang chi tiết lớp: xem, thêm, sửa, nhập Excel, xuất báo cáo học sinh của lớp */
-  async function classDetail(root, id) {
+  async function classDetail(root, id, params = {}) {
     const cls = App.classById(id);
     if (!cls) { root.innerHTML = `${head('Không tìm thấy lớp')}<div class="card">${empty('classes', 'Lớp không tồn tại hoặc bạn không có quyền xem', '<a href="#/classes">Quay lại danh sách lớp</a>')}</div>`; return; }
+    const admin = DB.isAdmin();
+    const tab = params.tab === 'attendance' ? 'attendance' : 'students';
+    const teachersText = [App.teacherName(cls.teacherId), cls.assistantId ? 'Trợ giảng: ' + App.teacherName(cls.assistantId) : ''].filter(Boolean).join(' · ');
+    const tabs = [['students', 'Học sinh', `#/classes/${id}`], ['attendance', 'Điểm danh học sinh & giáo viên', `#/classes/${id}?tab=attendance`], ['assess', 'Điểm kiểm tra', `#/assessments?class=${id}`], ['tuition', 'Học phí', `#/tuition?class=${id}`]];
+    root.innerHTML = `<div class="page-head"><div><a href="#/classes" class="small">${icon('back', 14)} Danh sách lớp</a>
+        <h1 style="margin-top:6px">${esc(cls.name)} <span class="badge blue" style="vertical-align:middle">${esc(cls.code)}</span></h1>
+        <p>${esc(U.scheduleText(cls))} · ${esc(teachersText)}</p></div>
+        <div class="row">${admin ? `<button class="btn ghost" id="editcls">${icon('edit')} Sửa lớp</button>` : ''}</div></div>
+      <div class="tabs">${tabs.map(([k, l, h]) => `<a class="tab ${k === tab ? 'on' : ''}" href="${h}">${l}</a>`).join('')}</div>
+      <div id="tabbody"></div>`;
+    const ec = root.querySelector('#editcls');
+    if (ec) ec.onclick = () => classModal(cls);
+    const body = root.querySelector('#tabbody');
+    if (tab === 'attendance') { await Views.attendance(body, { class: id, date: params.date, month: params.month, embed: 1 }); return; }
+    await studentsPanel(body, cls);
+  }
+
+  async function studentsPanel(root, cls) {
+    const id = cls.id;
     const admin = DB.isAdmin();
     let all = await DB.q('students', [['classId', '==', id]]);
     const st = { q: '', status: 'active' };
@@ -315,16 +334,12 @@ window.Views = window.Views || {};
       syncCount(list);
     };
 
-    const teachersText = [App.teacherName(cls.teacherId), cls.assistantId ? 'Trợ giảng: ' + App.teacherName(cls.assistantId) : ''].filter(Boolean).join(' · ');
-    root.innerHTML = `<div class="page-head"><div><a href="#/classes" class="small">${icon('back', 14)} Danh sách lớp</a>
-        <h1 style="margin-top:6px">${esc(cls.name)} <span class="badge blue" style="vertical-align:middle">${esc(cls.code)}</span></h1>
-        <p>${esc(U.scheduleText(cls))} · ${esc(teachersText)}</p></div>
-        <div class="row">${admin ? `<button class="btn ghost" id="editcls">${icon('edit')} Sửa lớp</button>` : ''}
+    root.innerHTML = `<div class="row" style="justify-content:flex-end;margin-bottom:14px">
           <button class="btn ghost" id="tpl">${icon('download')} Tải file mẫu</button>
           <button class="btn ghost" id="imp">${icon('upload')} Nhập Excel</button>
           <button class="btn ghost" id="exp">${icon('download')} Xuất báo cáo</button>
           <button class="btn" id="add">${icon('plus')} Thêm học sinh</button>
-          <input type="file" id="file" accept=".xlsx,.xls,.csv" class="hidden"></div></div>
+          <input type="file" id="file" accept=".xlsx,.xls,.csv" class="hidden"></div>
       <div class="card toolbar">
         <select class="select" id="fstatus"><option value="active">Đang học</option><option value="inactive">Đã nghỉ</option><option value="all">Tất cả</option></select>
         <div class="search">${icon('search', 16)}<input class="input" id="q" placeholder="Tìm theo tên, SĐT, mã HS..."></div>
@@ -333,8 +348,6 @@ window.Views = window.Views || {};
       <div class="card"><div class="table-wrap" id="tbl"></div></div>`;
     draw();
 
-    const ec = root.querySelector('#editcls');
-    if (ec) ec.onclick = () => classModal(cls);
     root.querySelector('#fstatus').onchange = (e) => { st.status = e.target.value; draw(); };
     root.querySelector('#q').oninput = (e) => { st.q = e.target.value; draw(); };
     root.querySelector('#add').onclick = () => studentModal(null, cls, reload);

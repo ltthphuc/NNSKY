@@ -433,3 +433,10 @@ table.t { width: 100%; border-collapse: collapse; }
   .tday-row .select, .tday-row [data-note] { width: 100%; flex: 1 1 100%; }
   .tday-row [data-sum] { min-width: 0 !important; width: 100%; }
 }
+
+/* ===== Tab trong trang chi tiết lớp ===== */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.tab { padding: 10px 16px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: 10px 10px 0 0; }
+.tab:hover { background: #eef3fb; color: var(--ink); }
+.tab.on { color: var(--primary); border-bottom-color: var(--primary); }
+@media (max-width: 700px) { .tabs { flex-wrap: nowrap; overflow-x: auto; } .tab { white-space: nowrap; padding: 10px 12px; } }

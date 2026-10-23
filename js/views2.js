@@ -9,6 +9,7 @@
    *  ĐIỂM DANH
    * =================================================================== */
   Views.attendance = async (root, params) => {
+    const embed = !!params.embed; // hiển thị bên trong trang chi tiết của lớp
     const classes = App.openClasses();
     if (!classes.length) { root.innerHTML = noClass('Điểm danh'); return; }
     let cls = classes.find((c) => c.id === (params.class || App.classId)) || classes[0];
@@ -18,6 +19,13 @@
     let tDocs = [], tMarks = {};
     const teacherIds = () => U.classTeachers(cls);
     const tName = (id) => App.teacherName(id);
+    const rateOf = (id) => { const t = App.teachers.find((x) => x.id === id) || {}; return Number(U.roleOf(cls, id) === 'main' ? t.rateMain : t.rateAssistant) || 0; };
+    const tSum = (id) => {
+      const t = tMarks[id];
+      const off = t.mode === 'none' ? t.planned : t.mode === 'part' ? Math.min(t.planned, Math.max(0, Number(t.off) || 0)) : 0;
+      const rate = rateOf(id);
+      return off ? `Nghỉ ${off}/${t.planned} tiết${rate ? ' · trừ ' + money(off * rate) : ''}` : `Dạy đủ ${t.planned} tiết`;
+    };
 
     const sessions = () => U.sessions(cls, ...U.monthRange(month));
     const loadClass = async () => {
@@ -36,9 +44,12 @@
       students.forEach((s) => { marks[s.id] = doc ? !(doc.records && doc.records[s.id] === false) : true; });
       const td = tDocs.find((d) => d.date === sel);
       tMarks = {};
+      const planned = sel ? Number(U.slotFor(cls, sel).periods) || Number(cls.periods) || 0 : 0;
       teacherIds().forEach((id) => {
         const r = td && td.records && td.records[id];
-        tMarks[id] = r ? { present: !!r.present, periods: Number(r.periods) || 0 } : { present: true, periods: Number(U.slotFor(cls, sel).periods) || Number(cls.periods) || 2 };
+        const taught = r && r.present ? Number(r.periods) || 0 : 0;
+        const mode = !r ? 'full' : !r.present ? 'none' : taught < planned ? 'part' : 'full';
+        tMarks[id] = { mode, off: mode === 'part' ? planned - taught : 0.5, note: (r && r.note) || '', planned };
       });
       dirty = false;
       savedAt = doc ? `Đã lưu${doc.updatedBy ? ' bởi ' + doc.updatedBy : ''}` : 'Chưa điểm danh buổi này';
@@ -77,21 +88,23 @@
         return `<tr><td class="muted">${i + 1}</td><td class="name">${esc(s.name)}</td>${cells}<td>${pr}</td><td><b>${ab}</b></td><td class="right mono"><b>${money(fee.total)}</b>${fee.deduct ? `<div class="small muted">-${money(fee.deduct)}</div>` : ''}</td></tr>`;
       }).join('');
 
-      root.innerHTML = `${head('Điểm danh', 'Chọn buổi học theo lịch của lớp, bỏ tick những em vắng mặt rồi bấm Lưu.',
-        `<button class="btn ghost" id="exp">${icon('download')} Tải mẫu / xuất Excel</button><button class="btn ghost" id="imp">${icon('upload')} Nhập từ Excel</button><input type="file" id="afile" accept=".xlsx,.xls" class="hidden">`)}
+      const actions = `<button class="btn ghost" id="exp">${icon('download')} Tải mẫu / xuất Excel</button><button class="btn ghost" id="imp">${icon('upload')} Nhập từ Excel</button><input type="file" id="afile" accept=".xlsx,.xls" class="hidden">`;
+      root.innerHTML = `${embed ? `<div class="row" style="justify-content:flex-end;margin-bottom:12px">${actions}</div>` : head('Điểm danh', 'Chọn buổi học theo lịch của lớp, điểm danh học sinh và giáo viên rồi bấm Lưu.', actions)}
         <div class="card toolbar">
-          <select class="select" id="cls">${App.classOptions(cls.id)}</select>
+          ${embed ? '' : `<select class="select" id="cls">${App.classOptions(cls.id)}</select>`}
           ${monthNav(month)}
           ${DB.isAdmin() ? `<select class="select" id="fmode" title="Cách tính học phí của lớp"><option value="absence" ${cls.feeMode !== 'attend' ? 'selected' : ''}>Học phí: theo số buổi nghỉ</option><option value="attend" ${cls.feeMode === 'attend' ? 'selected' : ''}>Học phí: theo số buổi đi học</option></select>` : ''}
           <span class="muted"><b>${esc(cls.name)}</b> · ${esc(U.scheduleText(cls))}</span>
         </div>
         <div class="small muted" style="margin:-6px 0 14px">${icon('info', 14)} ${esc(U.feeRuleText(cls, App.settings))}</div>
         <div class="strip">${strip}</div>
-        ${sel && teacherIds().length ? `<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Giáo viên dạy buổi này</h3><span class="small muted">Tick nếu có dạy, nhập số tiết để tính tiền giáo viên</span></div>
-          <div class="att-list">${teacherIds().map((id) => { const m = tMarks[id]; return `<div class="att-row ${m.present ? '' : 'absent'}" style="cursor:default">
-            <label style="display:flex;align-items:center;gap:14px;flex:1;cursor:pointer"><input type="checkbox" data-tid="${id}" ${m.present ? 'checked' : ''}><span class="box">${icon('check', 18)}</span>
-            <span class="nm">${esc(tName(id))}</span><span class="badge ${id === cls.teacherId ? 'blue' : ''}">${U.roleName(U.roleOf(cls, id))}</span></label>
-            <span class="small muted">Số tiết</span><input class="input" type="number" min="0" max="10" step="0.5" style="width:78px;text-align:center" data-tp="${id}" value="${m.periods}" ${m.present ? '' : 'disabled'}></div>`; }).join('')}</div></div>` : ''}
+        ${sel && teacherIds().length ? `<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Điểm danh giáo viên buổi này</h3><span class="small muted">Dạy đủ, nghỉ cả buổi hoặc nghỉ một số tiết (tiền nghỉ trừ vào lương, lưu cùng nút "Lưu điểm danh")</span></div>
+          ${teacherIds().map((id) => { const t = tMarks[id]; return `<div class="tday-row" data-tid="${id}">
+            <div class="grow"><b>${esc(tName(id))}</b> <span class="badge ${id === cls.teacherId ? 'blue' : ''}">${U.roleName(U.roleOf(cls, id))}</span></div>
+            <select class="select" data-mode>${[['full', 'Dạy đủ'], ['none', 'Nghỉ cả buổi'], ['part', 'Nghỉ một số tiết']].map(([v, l]) => `<option value="${v}" ${v === t.mode ? 'selected' : ''}>${l}</option>`).join('')}</select>
+            <label class="small muted ${t.mode === 'part' ? '' : 'hidden'}" data-offbox>Số tiết nghỉ <input class="input" type="number" min="0.5" max="${t.planned}" step="0.5" data-off value="${esc(t.off)}" style="width:78px"></label>
+            <input class="input" data-note placeholder="Lý do nghỉ (không bắt buộc)" value="${esc(t.note)}">
+            <span class="small ${t.mode === 'full' ? 'muted' : ''}" data-sum style="min-width:170px">${esc(tSum(id))}</span></div>`; }).join('')}</div>` : ''}
         ${sel ? `<div class="card">
           <div class="card-h">
             <div><h3>${U.dayName(U.parse(sel).getDay())}, ${U.fmtDate(sel)} · ${esc(U.timeText(U.slotFor(cls, sel)))}</h3><div class="small muted" id="saved">${esc(savedAt)}</div></div>
@@ -174,11 +187,11 @@
         try { await DB.save('classes', cls.id, { feeMode: e.target.value }); cls.feeMode = e.target.value; U.toast('Đã đổi cách tính học phí của lớp', 'ok'); render(); } catch (er) { U.toast(er.message, 'err'); }
         return;
       }
-      const tid = e.target.dataset && e.target.dataset.tid;
-      if (tid) {
-        tMarks[tid].present = e.target.checked; dirty = true;
-        const row = e.target.closest('.att-row'); row.classList.toggle('absent', !e.target.checked);
-        const pin = row.querySelector('[data-tp]'); pin.disabled = !e.target.checked;
+      if (e.target.matches('[data-mode]')) {
+        const row = e.target.closest('.tday-row'), t = tMarks[row.dataset.tid];
+        t.mode = e.target.value; dirty = true;
+        row.querySelector('[data-offbox]').classList.toggle('hidden', t.mode !== 'part');
+        const sm = row.querySelector('[data-sum]'); sm.textContent = tSum(row.dataset.tid); sm.classList.toggle('muted', t.mode === 'full');
         updateCounts();
         return;
       }
@@ -192,8 +205,14 @@
       }
     };
     root.oninput = (e) => {
-      const tp = e.target.dataset && e.target.dataset.tp;
-      if (tp) { tMarks[tp].periods = Number(e.target.value) || 0; dirty = true; updateCounts(); }
+      const row = e.target.closest && e.target.closest('.tday-row');
+      if (!row) return;
+      const t = tMarks[row.dataset.tid];
+      if (e.target.matches('[data-off]')) t.off = e.target.value;
+      else if (e.target.matches('[data-note]')) t.note = e.target.value;
+      else return;
+      dirty = true; updateCounts();
+      const sm = row.querySelector('[data-sum]'); sm.textContent = tSum(row.dataset.tid);
     };
     root.onclick = async (e) => {
       const t = e.target;
@@ -212,6 +231,15 @@
       if (t.closest('#save')) {
         const btn = t.closest('#save'); btn.disabled = true;
         try {
+          // kiểm tra phần điểm danh giáo viên trước khi lưu
+          const trNew = {};
+          for (const tid of teacherIds()) {
+            const t = tMarks[tid];
+            const off = t.mode === 'part' ? Number(t.off) || 0 : 0;
+            if (t.mode === 'part' && !(off > 0)) throw new Error(`Nhập số tiết nghỉ của ${tName(tid)} (lớn hơn 0).`);
+            const none = t.mode === 'none' || (t.mode === 'part' && off >= t.planned);
+            trNew[tid] = none ? { present: false, periods: 0, planned: t.planned, note: t.note || '' } : { present: true, periods: t.planned - off, planned: t.planned, note: t.note || '' };
+          }
           const old = docs.find((d) => d.date === sel);
           const records = { ...((old && old.records) || {}) };
           roster().forEach((s) => { records[s.id] = !!marks[s.id]; });
@@ -221,9 +249,7 @@
           docs = docs.filter((d) => d.date !== sel).concat([{ id, ...data }]);
           if (teacherIds().length) {
             const oldT = tDocs.find((d) => d.date === sel);
-            const tr = { ...((oldT && oldT.records) || {}) };
-            const plannedP = Number(U.slotFor(cls, sel).periods) || Number(cls.periods) || 0;
-            teacherIds().forEach((tid) => { tr[tid] = { present: !!tMarks[tid].present, periods: tMarks[tid].present ? Number(tMarks[tid].periods) || 0 : 0, planned: plannedP, note: (tr[tid] && tr[tid].note) || '' }; });
+            const tr = { ...((oldT && oldT.records) || {}), ...trNew };
             const tdata = { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), date: sel, records: tr, updatedBy: App.me.name };
             await DB.save('teacherAttendance', id, tdata, true);
             tDocs = tDocs.filter((d) => d.date !== sel).concat([{ id, ...tdata }]);
@@ -471,6 +497,7 @@
     const admin = DB.isAdmin();
     const st = (App.tuitionState = App.tuitionState || { month: U.today().slice(0, 7), classId: '' });
     if (params.month) st.month = params.month;
+    if (params.class !== undefined) st.classId = params.class;
     let students = [], attendance = [], payments = [];
     const load = async () => {
       [students, attendance, payments] = await Promise.all([DB.q('students'), DB.q('attendance'), DB.q('payments', [['month', '==', st.month]])]);
@@ -600,36 +627,16 @@
       rows.forEach((r) => { const p = payouts.find((x) => x.id === `${r.teacher.id}_${st.month}`); r.pay = p; r.paid = !!(p && p.paid); if (r.paid) r.amount = p.amount; });
       return rows;
     };
-    /* ---------- chấm công giáo viên theo ngày: dạy đủ / nghỉ cả buổi / nghỉ một số tiết ---------- */
-    st.day = st.day || U.today();
     const rateOf = (c, tid) => { const t = App.teachers.find((x) => x.id === tid) || {}; return Number(U.roleOf(c, tid) === 'main' ? t.rateMain : t.rateAssistant) || 0; };
-    const dayCard = () => {
-      const d = st.day;
-      const cl = App.classes.filter((c) => U.sessions(c, d, d).length);
-      const blocks = cl.map((c) => {
-        const slot = U.slotFor(c, d);
-        const planned = Number(slot.periods) || Number(c.periods) || 0;
-        const doc = tAtt.find((x) => x.classId === c.id && x.date === d);
-        const trs = U.classTeachers(c).map((tid) => {
-          const rec = doc && doc.records && doc.records[tid];
-          const taught = rec && rec.present ? Number(rec.periods) || 0 : 0;
-          const mode = !rec ? 'full' : !rec.present ? 'none' : taught < planned ? 'part' : 'full';
-          const off = mode === 'none' ? planned : mode === 'part' ? planned - taught : 0;
-          const rate = rateOf(c, tid);
-          return `<div class="tday-row" data-tid="${tid}" data-rate="${rate}">
-            <div class="grow"><b>${esc(App.teacherName(tid))}</b> <span class="badge ${tid === c.teacherId ? 'blue' : ''}">${U.roleName(U.roleOf(c, tid))}</span></div>
-            <select class="select" data-mode>${[['full', 'Dạy đủ'], ['none', 'Nghỉ cả buổi'], ['part', 'Nghỉ một số tiết']].map(([v, l]) => `<option value="${v}" ${v === mode ? 'selected' : ''}>${l}</option>`).join('')}</select>
-            <label class="small muted ${mode === 'part' ? '' : 'hidden'}" data-offbox>Số tiết nghỉ <input class="input" type="number" min="0.5" max="${planned}" step="0.5" data-off value="${mode === 'part' ? off : 0.5}" style="width:78px"></label>
-            <input class="input" data-note placeholder="Lý do (không bắt buộc)" value="${esc((rec && rec.note) || '')}">
-            <span class="small ${off ? '' : 'muted'}" data-sum style="min-width:170px">${off ? `Nghỉ ${off}/${planned} tiết · trừ ${money(off * rate)}` : `Dạy đủ ${planned} tiết`}</span></div>`;
-        }).join('');
-        return `<div class="dayclass" data-cls="${c.id}" data-planned="${planned}"><div class="dc-h"><b>${esc(c.name)}</b> <span class="muted">${esc(U.timeText(slot))} · ${planned} tiết</span> ${doc ? '<span class="badge ok">Đã chấm công</span>' : '<span class="badge warn">Chưa chấm công</span>'}</div>${trs}</div>`;
-      }).join('');
-      return `<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Chấm công giáo viên theo ngày</h3><div class="grow"></div>
-          <div class="row" style="flex-wrap:nowrap"><button class="icon-btn" id="dayprev" title="Ngày trước">${icon('left')}</button><input class="input" type="date" id="cday" value="${esc(d)}" style="width:auto"><button class="icon-btn" id="daynext" title="Ngày sau">${icon('right')}</button><button class="btn sm ghost" id="daytoday">Hôm nay</button></div></div>
-        <div class="card-b">${blocks || `<div class="muted">Ngày ${U.fmtDate(d)} (${U.dayName(U.parse(d).getDay())}) không có lớp nào học theo lịch.</div>`}
-        ${blocks ? `<div class="hint" style="margin-top:8px">Chọn "Nghỉ cả buổi" hoặc "Nghỉ một số tiết" cho giáo viên nghỉ, số tiền bị trừ tính bằng số tiết nghỉ nhân đơn giá tiết. Mặc định là dạy đủ.</div><div class="row mt"><button class="btn ok" id="saveday">${icon('check')} Lưu chấm công ngày ${U.fmtDate(d)}</button></div>` : ''}</div></div>`;
-    };
+    const offList = () => tAtt.filter((d) => String(d.date).slice(0, 7) === st.month).flatMap((d) => {
+      const c = App.classById(d.classId);
+      if (!c) return [];
+      return Object.entries(d.records || {}).filter(([tid]) => admin || tid === App.me.uid).map(([tid, rec]) => {
+        const planned = rec.planned != null ? Number(rec.planned) : Number(U.slotFor(c, d.date).periods) || Number(c.periods) || 0;
+        const off = Math.max(0, planned - (rec.present ? Number(rec.periods) || 0 : 0));
+        return off > 0 ? { date: d.date, c, tid, planned, off, none: !rec.present, note: rec.note || '', rate: rateOf(c, tid) } : null;
+      }).filter(Boolean);
+    }).sort((a, b) => b.date.localeCompare(a.date));
     const render = () => {
       const rows = compute();
       const total = rows.reduce((s, r) => s + r.amount, 0), paid = rows.filter((r) => r.paid).reduce((s, r) => s + r.amount, 0);
@@ -639,7 +646,7 @@
       root.innerHTML = `${head('Công & lương giáo viên', 'Tiền giáo viên = số tiết đã dạy × đơn giá mỗi tiết. Giáo viên nghỉ cả buổi hoặc nghỉ một số tiết đều bị trừ tương ứng, ghi nhận ở phần "Chấm công giáo viên theo ngày" bên dưới.',
         `${admin ? `<button class="btn ghost" id="tgrid">${icon('download')} Tải mẫu chấm công</button><button class="btn ghost" id="impg">${icon('upload')} Nhập chấm công từ Excel</button><input type="file" id="gfile" accept=".xlsx,.xls" class="hidden">` : ''}<button class="btn ghost" id="exp" ${rows.length ? '' : 'disabled'}>${icon('download')} Xuất Excel</button>`)}
         <div class="card toolbar">${monthNav(st.month)}<span class="muted grow">${icon('info', 15)} 1 tiết = ${esc(App.settings.periodMinutes)} phút. Số tiết mỗi buổi chọn khi điểm danh giáo viên.</span></div>
-        ${dayCard()}
+        <div class="alert" style="margin-bottom:16px">${icon('info', 15)} Chấm công giáo viên (dạy đủ, nghỉ cả buổi, nghỉ một số tiết) thực hiện trong trang của từng lớp: <b>Lớp học → chọn lớp → Điểm danh</b>. Bảng dưới đây tự tổng hợp từ dữ liệu đó.</div>
         <div class="stats">
           <div class="card stat"><div class="ico">${icon('wallet', 24)}</div><div><b>${money(total)}</b><span>Tổng tiền thực nhận</span></div></div>
           <div class="card stat"><div class="ico g">${icon('check', 24)}</div><div><b>${money(paid)}</b><span>Đã trả</span></div></div>
@@ -653,6 +660,8 @@
             <td>${r.paid ? `<span class="badge ok">${icon('check', 13)} Đã trả</span>` : '<span class="badge warn">Chưa trả</span>'}</td>
             ${admin ? `<td class="right nowrap">${r.paid ? `<button class="btn sm ghost" data-unpay="${r.teacher.id}">Hoàn tác</button>` : `<button class="btn sm ok" data-pay="${r.teacher.id}">Đã trả</button>`}</td>` : ''}</tr>`).join('')}
           </tbody><tfoot><tr><td>Tổng cộng</td><td class="center">${rows.reduce((s, r) => s + r.sessions, 0)}</td><td class="center">${rows.reduce((s, r) => s + r.absent, 0)}</td><td class="center">${rows.reduce((s, r) => s + r.planned, 0)}</td><td class="center">${rows.reduce((s, r) => s + r.off, 0)}</td><td class="center">${rows.reduce((s, r) => s + r.periods, 0)}</td><td class="right mono">${money(rows.reduce((s, r) => s + r.gross, 0))}</td><td class="right mono">-${money(rows.reduce((s, r) => s + r.deduct, 0))}</td><td class="right mono">${money(total)}</td><td colspan="${admin ? 2 : 1}"></td></tr></tfoot></table>` : empty('wallet', 'Chưa có dữ liệu dạy trong tháng này', 'Tiền giáo viên được tính từ phần "Giáo viên dạy buổi này" trong màn hình Điểm danh.')}</div></div>
+        ${offList().length ? `<div class="card mt"><div class="card-h"><h3>Các buổi giáo viên nghỉ trong tháng</h3><span class="small muted">Tiền trừ = số tiết nghỉ × đơn giá tiết</span></div><div class="table-wrap"><table class="t"><thead><tr><th>Ngày</th><th>Lớp</th><th>Giáo viên</th><th>Loại nghỉ</th><th class="center">Tiết nghỉ</th><th class="right">Tiền trừ</th><th>Lý do</th></tr></thead><tbody>
+          ${offList().map((o) => `<tr><td class="nowrap">${U.fmtDate(o.date)}</td><td><span class="badge blue">${esc(o.c.name)}</span></td><td class="name">${esc(App.teacherName(o.tid))}</td><td>${o.none ? '<span class="badge err">Nghỉ cả buổi</span>' : '<span class="badge warn">Nghỉ một số tiết</span>'}</td><td class="center">${o.off}/${o.planned}</td><td class="right mono">${o.rate ? '-' + money(o.off * o.rate) : '-'}</td><td class="small">${esc(o.note)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
         ${lines.length ? `<div class="card mt"><div class="card-h"><h3>Chi tiết theo lớp</h3></div><div class="table-wrap"><table class="t"><thead><tr><th>Giáo viên</th><th>Lớp</th><th>Vai trò</th><th class="center">Số buổi dạy</th><th class="center">Nghỉ cả buổi</th><th class="center">Tiết theo lịch</th><th class="center">Tiết nghỉ</th><th class="center">Tiết đã dạy</th><th class="right">Đơn giá/tiết</th><th class="right">Trừ do nghỉ</th><th class="right">Thực nhận</th></tr></thead><tbody>
           ${lines.map(({ r, l }) => `<tr><td class="name">${esc(r.teacher.name)}</td><td><span class="badge blue">${esc(l.cls.name)}</span></td><td>${U.roleName(l.role)}</td><td class="center">${l.sessions}</td><td class="center">${l.absent}</td><td class="center">${l.planned}</td><td class="center">${l.off ? `<b style="color:var(--err)">${l.off}</b>` : 0}</td><td class="center">${l.periods}</td><td class="right mono">${money(l.rate)}</td><td class="right mono">${l.deduct ? '-' + money(l.deduct) : '-'}</td><td class="right mono">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
     };
@@ -698,59 +707,13 @@
         },
       });
     };
-    const sumRow = (row) => {
-      const planned = Number(row.closest('.dayclass').dataset.planned);
-      const mode = row.querySelector('[data-mode]').value;
-      const off = mode === 'none' ? planned : mode === 'part' ? Math.min(planned, Math.max(0, Number(row.querySelector('[data-off]').value) || 0)) : 0;
-      const sum = row.querySelector('[data-sum]');
-      sum.textContent = off ? `Nghỉ ${off}/${planned} tiết · trừ ${money(off * Number(row.dataset.rate))}` : `Dạy đủ ${planned} tiết`;
-      sum.classList.toggle('muted', !off);
-    };
-    root.oninput = (e) => { if (e.target.matches('[data-off]')) sumRow(e.target.closest('.tday-row')); };
-    const saveDay = async (btn) => {
-      btn.disabled = true;
-      try {
-        for (const block of root.querySelectorAll('.dayclass')) {
-          const c = App.classById(block.dataset.cls), planned = Number(block.dataset.planned);
-          const id = `${c.id}_${st.day}`;
-          const old = tAtt.find((x) => x.id === id);
-          const records = { ...((old && old.records) || {}) };
-          for (const row of block.querySelectorAll('.tday-row')) {
-            const mode = row.querySelector('[data-mode]').value, note = row.querySelector('[data-note]').value.trim();
-            let off = mode === 'part' ? Number(row.querySelector('[data-off]').value) || 0 : 0;
-            if (mode === 'part' && !(off > 0)) throw new Error('Nhập số tiết nghỉ (lớn hơn 0).');
-            if (mode === 'part' && off >= planned) off = planned;
-            const none = mode === 'none' || (mode === 'part' && off >= planned);
-            records[row.dataset.tid] = none ? { present: false, periods: 0, planned, note } : { present: true, periods: planned - off, planned, note };
-          }
-          const data = { classId: c.id, teacherId: c.teacherId || '', teacherIds: U.classTeachers(c), date: st.day, records, updatedBy: App.me.name };
-          await DB.save('teacherAttendance', id, data, true);
-          tAtt = tAtt.filter((x) => x.id !== id).concat([{ id, ...data }]);
-        }
-        U.toast(`Đã lưu chấm công giáo viên ngày ${U.fmtDate(st.day)}`, 'ok');
-        render();
-      } catch (er) { U.toast(er.message, 'err'); btn.disabled = false; }
-    };
     root.onchange = async (e) => {
-      if (e.target.id === 'cday') { if (e.target.value) { st.day = e.target.value; render(); } return; }
-      if (e.target.matches('[data-mode]')) {
-        const row = e.target.closest('.tday-row');
-        row.querySelector('[data-offbox]').classList.toggle('hidden', e.target.value !== 'part');
-        sumRow(row);
-        return;
-      }
-      if (e.target.matches('[data-off]')) { sumRow(e.target.closest('.tday-row')); return; }
       if (e.target.id !== 'gfile') return;
       const f = e.target.files[0]; e.target.value = '';
       if (f) { try { await importGrid(f); } catch (er) { U.toast(er.message, 'err'); } }
     };
-    const shiftDay = (n) => { const x = U.parse(st.day); x.setDate(x.getDate() + n); st.day = U.ymd(x); render(); };
     root.onclick = async (e) => {
       const t = e.target;
-      if (t.closest('#dayprev')) return shiftDay(-1);
-      if (t.closest('#daynext')) return shiftDay(1);
-      if (t.closest('#daytoday')) { st.day = U.today(); render(); return; }
-      if (t.closest('#saveday')) return saveDay(t.closest('#saveday'));
       if (t.closest('#tgrid')) { const g = gridData(); if (!g.entries.length) return U.toast('Không có lớp nào có buổi học trong tháng này.', 'err'); X.exportTeacherGrid(g.entries, st.month, g.dates); return; }
       if (t.closest('#impg')) { root.querySelector('#gfile').click(); return; }
       if (t.closest('[data-mprev]')) { st.month = U.addMonth(st.month, -1); await load(); return render(); }

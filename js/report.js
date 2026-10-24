@@ -327,6 +327,7 @@
     td.s small { display: block; color: #44546a; font-size: 8pt; font-style: italic; text-align: left; margin-top: .6mm; line-height: 1.25; }
     tfoot td { background: #e3eefc !important; font-weight: bold; }
     .hi { color: #0e7a3e; } .mid { color: #1f6feb; } .lo { color: #b45309; } .vlo { color: #c62828; }
+    .sec { page-break-after: always; } .sec:last-child { page-break-after: auto; }
     .sign { display: flex; justify-content: space-around; margin-top: 8mm; text-align: center; page-break-inside: avoid; }
     .sign div { width: 70mm; } .sign .gap { height: 20mm; }
   `;
@@ -339,8 +340,8 @@
       <div class="org">${esc(o.center.toUpperCase())}</div><div class="star">✦ &nbsp;✦ &nbsp;✦</div>
       <h1>GIẤY CHỨNG NHẬN</h1><h2>HOÀN THÀNH KHÓA HỌC</h2>
       <div class="lead">Chứng nhận học sinh</div><div class="name">${esc(c.student.name.toUpperCase())}</div>
-      <p class="course">Đã hoàn thành khóa học: <b>${esc(o.course)}</b>${o.code ? ` (${esc(o.code)})` : ''}</p>
-      <p class="time">Thời gian: từ ngày ${esc(o.from || '………………')} đến ngày ${esc(o.to || '………………')}</p>
+      <p class="course">Đã hoàn thành khóa học: <b>${esc(c.course || o.course)}</b>${(c.code || o.code) ? ` (${esc(c.code || o.code)})` : ''}</p>
+      <p class="time">Thời gian: từ ngày ${esc((c.from !== undefined ? c.from : o.from) || '………………')} đến ngày ${esc((c.to !== undefined ? c.to : o.to) || '………………')}</p>
       ${o.showScores && c.tests.length ? `<table class="sc"><thead><tr><th>Bài kiểm tra</th><th style="text-align:center">Điểm</th>${o.showComments ? '<th>Nhận xét</th>' : ''}</tr></thead><tbody>
         ${c.tests.map((t) => `<tr><td>${esc(t.title)} (${esc(U.shortDate(t.date))})</td><td class="s ${scoreCls(t.score)}">${esc(fmtScore(t.score))}</td>${o.showComments ? `<td class="cm">${esc(t.comment)}</td>` : ''}</tr>`).join('')}
         ${c.avg !== '' ? `<tr class="avg"><td>Điểm trung bình</td><td class="s">${esc(fmtScore(c.avg))}</td>${o.showComments ? '<td></td>' : ''}</tr>` : ''}</tbody></table>` : ''}
@@ -352,7 +353,7 @@
   }
 
   /* d: { center, cls, teachers, from, to, tests, rows:[{student,tests,avg}], classTotal, showComments, org, title, signer, issue } */
-  function printSummary(d) {
+  function summaryHtml(d) {
     const avgOf2 = (arr) => { const v = arr.filter((x) => typeof x === 'number'); return v.length ? Math.round((v.reduce((p, c) => p + c, 0) / v.length) * 100) / 100 : ''; };
     const head = d.tests.map((a) => `<th>${esc(a.title)}<br><small>${esc(U.shortDate(a.date))}</small></th>`).join('');
     const body = d.rows.map((r, i) => `<tr><td class="n">${i + 1}</td><td class="nm">${esc(r.student.name)}</td>${r.tests.map((t) => `<td class="s"><b class="${scoreCls(t.score)}">${esc(fmtScore(t.score)) || '–'}</b>${d.showComments && t.comment ? `<small>${esc(t.comment)}</small>` : ''}</td>`).join('')}<td class="s"><b class="${scoreCls(r.avg)}">${esc(fmtScore(r.avg)) || '–'}</b></td></tr>`).join('');
@@ -364,8 +365,10 @@
       <table><thead><tr><th>STT</th><th>Họ và tên</th>${head}<th>Điểm TB</th></tr></thead><tbody>${body}</tbody>${d.tests.length ? `<tfoot>${foot}</tfoot>` : ''}</table>
       <div class="sign"><div><i>${esc(d.issue || 'Ngày ……… tháng ……… năm ………')}</i><br><b>Giáo viên phụ trách</b><br><i style="font-size:9pt">(ký, ghi rõ họ tên)</i><div class="gap"></div></div>
         <div><i>&nbsp;</i><br><b>${esc(d.org)} - ${esc(d.title)}</b><br><i style="font-size:9pt">(ký tên, đóng dấu)</i><div class="gap"></div><b>${esc(d.signer || '')}</b></div></div>`;
-    U.printHTML(wrap(SUM_CSS, html));
+    return html;
   }
+  const printSummary = (d) => U.printHTML(wrap(SUM_CSS, summaryHtml(d)));
+  const printSummaries = (arr) => U.printHTML(wrap(SUM_CSS, arr.map((d) => `<div class="sec">${summaryHtml(d)}</div>`).join('')));
 
-  window.Report = { open, printCertificates, printSummary };
+  window.Report = { open, printCertificates, printSummary, printSummaries };
 })();

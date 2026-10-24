@@ -133,7 +133,7 @@
             <div class="grow"></div>
             <div class="att-summary"><span class="badge ok" id="cp">Có mặt: ${p}</span><span class="badge err" id="ca">Vắng: ${a}</span><span class="badge" id="ct">Tổng: ${roster().length}</span><span class="badge warn ${dirty ? '' : 'hidden'}" id="dirty">Chưa lưu</span></div>
           </div>
-          <div class="row" style="padding:12px 16px 0"><button class="btn sm soft" id="allp">${icon('check', 15)} Có mặt tất cả</button><button class="btn sm ghost" id="alla">Vắng tất cả</button><div class="grow"></div><button class="btn sm ok" id="bulk" title="Cho tất cả học sinh có mặt đủ nhiều buổi cùng lúc">${icon('check', 15)} Điểm danh nhanh nhiều ngày</button></div>
+          <div class="row" style="padding:12px 16px 0"><button class="btn sm soft" id="allp">${icon('check', 15)} Có mặt tất cả</button><button class="btn sm ghost" id="alla">Vắng tất cả</button><div class="grow"></div><button class="btn sm ok" id="bulk" title="Chọn nhiều ngày đã học trước đây và cho cả lớp có mặt cùng lúc">${icon('check', 15)} Điểm danh bù nhiều ngày</button></div>
           ${roster().length ? `<div class="att-list">${rows}</div>` : empty('students', 'Chưa có học sinh nào đang học vào ngày này', 'Thêm học sinh trong trang của lớp (Lớp học → chọn lớp).')}
           <div class="sticky-bar"><button class="btn ok lg" id="save" ${roster().length ? '' : 'disabled'}>${icon('check')} Lưu điểm danh</button><button class="btn ghost" id="mkass">${icon('star')} Tạo đánh giá cho buổi này</button></div>
         </div>` : ''}
@@ -160,26 +160,29 @@
     };
     const bulk = async () => {
       if (!(await guard())) return;
-      const ss = sessions().filter((d) => d <= U.today());
-      if (!ss.length) { U.toast('Không có buổi học nào đã diễn ra trong phạm vi đang xem.', 'err'); return; }
-      const done = ss.filter((d) => docs.some((x) => x.date === d)).length;
-      const label = scope === 'all' ? 'từ khi mở lớp đến hôm nay' : scope === 'week' ? `trong tuần ${U.shortDate(weekDates()[0])} - ${U.shortDate(weekDates()[1])}` : `trong ${U.monthLabel(month).toLowerCase()}`;
-      U.modal({
-        title: 'Điểm danh nhanh nhiều ngày', okText: 'Điểm danh đủ',
-        body: `<p style="margin-top:0">Đặt <b>tất cả học sinh có mặt</b> cho <b>${ss.length}</b> buổi đã diễn ra ${label}. Hiện đã có ${done} buổi được điểm danh.</p>
-          <label class="ck"><input type="radio" name="bm" value="new" checked> Chỉ các buổi chưa điểm danh (${ss.length - done} buổi), giữ nguyên buổi đã điểm danh</label>
-          <label class="ck"><input type="radio" name="bm" value="all"> Tất cả ${ss.length} buổi (ghi đè điểm danh đã có, kể cả các em đã vắng)</label>
-          <label class="ck" style="margin-top:8px"><input type="checkbox" id="bt"> Đồng thời ghi giáo viên dạy đủ các buổi này</label>
-          <div class="hint">Học sinh chỉ được tính từ ngày bắt đầu học của em đó. Sau đó vẫn sửa lại từng ngày được (bỏ tick những em vắng).</div>`,
+      const ss = U.sessions(cls, startD || '2000-01-01', U.today());
+      if (!ss.length) { U.toast('Lớp chưa có buổi học nào đã diễn ra.', 'err'); return; }
+      const has = (d) => docs.some((x) => x.date === d);
+      const byM = {};
+      ss.forEach((d) => { (byM[d.slice(0, 7)] = byM[d.slice(0, 7)] || []).push(d); });
+      const list = Object.keys(byM).sort().reverse().map((m) => `<div class="small muted" style="margin:10px 0 4px"><b>${U.monthLabel(m)}</b></div><div class="row" style="flex-wrap:wrap;gap:6px">${byM[m].slice().reverse().map((d) => `<label class="ck" style="margin:0;padding:6px 10px;border:1px solid var(--line,#dbe3f0);border-radius:8px"><input type="checkbox" data-bd="${d}" ${has(d) ? '' : 'checked'}> ${U.dayName(U.parse(d).getDay())} ${U.shortDate(d)}${has(d) ? ' <span class="badge ok">đã ĐD</span>' : ''}</label>`).join('')}</div>`).join('');
+      const bm = U.modal({
+        title: 'Điểm danh bù nhiều ngày', okText: 'Điểm danh bù',
+        body: `<p style="margin-top:0">Tick các ngày đã học trước đây, bấm <b>Điểm danh bù</b>: <b>tất cả học sinh trong lớp có mặt</b> vào các ngày đã chọn (mỗi em chỉ tính từ ngày bắt đầu học của em đó).</p>
+          <div class="row" style="gap:8px;margin-bottom:6px"><button class="btn sm soft" type="button" data-pick="new">Chỉ ngày chưa điểm danh</button><button class="btn sm ghost" type="button" data-pick="all">Chọn tất cả</button><button class="btn sm ghost" type="button" data-pick="none">Bỏ chọn</button><span class="small muted" id="bcnt"></span></div>
+          <div style="max-height:46vh;overflow:auto">${list}</div>
+          <label class="ck" style="margin-top:10px"><input type="checkbox" id="bo"> Ghi đè các ngày đã điểm danh (đặt cả những em đang vắng thành có mặt)</label>
+          <label class="ck"><input type="checkbox" id="bt"> Đồng thời ghi giáo viên dạy đủ các buổi này</label>
+          <div class="hint">Với ngày đã điểm danh, nếu không ghi đè thì giữ nguyên các em đã có dữ liệu và chỉ thêm em chưa có. Sau đó vẫn sửa lại từng ngày được.</div>`,
         onOk: async (w) => {
-          const mode = w.querySelector('[name=bm]:checked').value, withT = w.querySelector('#bt').checked;
-          const targets = mode === 'new' ? ss.filter((d) => !docs.some((x) => x.date === d)) : ss;
-          if (!targets.length) throw new Error('Không có buổi nào cần điểm danh.');
+          const mode = w.querySelector('#bo').checked ? 'all' : 'new', withT = w.querySelector('#bt').checked;
+          const targets = [...w.querySelectorAll('[data-bd]:checked')].map((c) => c.dataset.bd).sort();
+          if (!targets.length) throw new Error('Hãy tick ít nhất một ngày.');
           for (const d of targets) {
             const id = `${cls.id}_${d}`;
             const old = await fresh('attendance', id, docs.find((x) => x.date === d));
             const records = { ...((old && old.records) || {}) };
-            students.filter((s) => !s.startDate || s.startDate <= d).forEach((s) => { records[s.id] = true; });
+            students.filter((s) => !s.startDate || s.startDate <= d).forEach((s) => { if (mode === 'all' || records[s.id] === undefined) records[s.id] = true; });
             const data = { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), date: d, records, updatedBy: App.me.name + ' (điểm danh nhanh)' };
             await DB.save('attendance', id, data, true);
             docs = docs.filter((x) => x.date !== d).concat([{ id, ...data }]);
@@ -193,10 +196,17 @@
               tDocs = tDocs.filter((x) => x.date !== d).concat([{ id, ...tdata }]);
             }
           }
-          U.toast(`Đã điểm danh đủ ${targets.length} buổi cho ${students.length} học sinh`, 'ok');
+          U.toast(`Đã điểm danh bù ${targets.length} buổi cho ${students.length} học sinh`, 'ok');
           loadDay(); render();
         },
       });
+      const cnt = () => { bm.el.querySelector('#bcnt').textContent = 'Đã chọn ' + bm.el.querySelectorAll('[data-bd]:checked').length + ' ngày'; };
+      bm.el.addEventListener('click', (e) => {
+        const p = e.target.closest('[data-pick]'); if (!p) return;
+        bm.el.querySelectorAll('[data-bd]').forEach((c) => { c.checked = p.dataset.pick === 'all' || (p.dataset.pick === 'new' && !has(c.dataset.bd)); });
+        cnt();
+      });
+      bm.el.addEventListener('change', cnt); cnt();
     };
     const gotoMonth = async (m) => { if ((startM && m < startM) || (endM && m > endM)) return; if (!(await guard())) return; month = m; sel = null; pickDefault(); loadDay(); render(); };
 

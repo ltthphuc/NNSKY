@@ -525,90 +525,107 @@
 
   /*
    * Giấy chứng nhận SONG NGỮ Anh - Việt: TẤT CẢ học sinh trong 1 sheet.
-   * Tờ A4 NGANG, mỗi tờ in 2 giấy xếp trên - dưới (mỗi giấy 1/2 tờ, dài hết khổ giấy), có khoảng trống giữa hai giấy.
-   * Bảng điểm xếp theo hàng ngang (mỗi bài kiểm tra một cột), chữ ký nằm bên phải.
+   * Tờ A4 NGANG, mỗi tờ in 2 giấy xếp TRÁI - PHẢI (mỗi giấy 1/2 tờ), có khoảng trống giữa hai giấy.
    * card: { center, centerEn?, student, courseName, courseNameEn?, classCode, from, to, tests, avg, showScores, org, signerTitle, signerTitleEn?, signerName, issueDate }
    */
   X.exportCertificates = safe(async (cards, filename) => {
     const wb = newBook();
-    const SERIF = 'Times New Roman', GOLD = 'FFB8860B', N = 12, MAXT = 6;
-    const F = 248, G = 8; // chiều cao khung mỗi giấy và khoảng trống giữa các giấy (point)
+    const SERIF = 'Times New Roman', GOLD = 'FFB8860B', MAXT = 8;
+    const F = 500; // chiều cao khung (point)
     const ws = wb.addWorksheet('Giấy chứng nhận', {
-      pageSetup: { ...pageSetup(true), fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
+      pageSetup: { ...pageSetup(true), fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } },
       views: [{ showGridLines: false }],
     });
-    for (let i = 1; i <= N; i++) ws.getColumn(i).width = 11.5;
+    // giấy trái: cột 1-6, cột 7 là khoảng trống, giấy phải: cột 8-13
+    for (let i = 1; i <= 13; i++) ws.getColumn(i).width = i === 7 ? 2 : 11.3;
     const dbl = { style: 'double', color: { argb: NAVY } };
     const ink = { argb: 'FF1B2B45' };
     const thinB = { top: { style: 'thin', color: { argb: LINE } }, left: { style: 'thin', color: { argb: LINE } }, bottom: { style: 'thin', color: { argb: LINE } }, right: { style: 'thin', color: { argb: LINE } } };
+    const span = (rr, from, to, text, font, h = 'centerContinuous') => {
+      for (let i = from; i <= to; i++) ws.getCell(rr, i).alignment = { horizontal: h, vertical: 'middle', wrapText: false };
+      const cell = ws.getCell(rr, from); cell.value = text; cell.font = font;
+    };
     let r = 1, truncated = false;
-    cards.forEach((c, idx) => {
+    for (let p = 0; p < cards.length; p += 2) {
+      const pair = [cards[p], cards[p + 1]].filter(Boolean);
+      const T = Math.max(0, ...pair.map((c) => (c.showScores ? Math.min(MAXT, c.tests.length) : 0)));
+      if (pair.some((c) => c.showScores && c.tests.length > MAXT)) truncated = true;
       const top = r;
-      let used = 0;
-      const row = (h) => { ws.getRow(r).height = h; used += h; };
-      const blank = (h) => { row(h); r++; };
-      const span = (rr, from, to, text, font) => {
-        for (let i = from; i <= to; i++) ws.getCell(rr, i).alignment = { horizontal: 'centerContinuous', vertical: 'middle', wrapText: false };
-        const cell = ws.getCell(rr, from); cell.value = text; cell.font = font;
-      };
-      const line = (text, font, h) => { span(r, 1, N, text, font); row(h); r++; };
-      const fromT = c.from || '…………………', toT = c.to || '…………………';
-      const courseEn = c.courseNameEn || U.enClass(c.courseName);
-      blank(12);
-      line(`${c.center.toUpperCase()}  ·  ${c.centerEn || U.centerEn()}`, { name: SERIF, bold: true, size: 12, color: { argb: BLUE } }, 16);
-      line('GIẤY CHỨNG NHẬN HOÀN THÀNH KHÓA HỌC', { name: SERIF, bold: true, size: 19, color: { argb: NAVY } }, 26);
-      line('CERTIFICATE OF COURSE COMPLETION', { name: SERIF, bold: true, size: 10.5, color: { argb: BLUE } }, 15);
-      line('Chứng nhận học sinh / This is to certify that', { name: SERIF, italic: true, size: 9.5, color: { argb: GRAYTXT } }, 14);
-      line(c.student.name.toUpperCase(), { name: SERIF, bold: true, size: 18, color: { argb: 'FFB3261E' } }, 27);
-      for (let i = 4; i <= 9; i++) ws.getCell(r - 1, i).border = { bottom: { style: 'thin', color: { argb: GOLD } } };
-      line(`Đã hoàn thành khóa học: ${c.courseName}${c.classCode ? ' (' + c.classCode + ')' : ''}  /  has successfully completed the course: ${courseEn}`, { name: SERIF, size: 10.5, color: ink }, 16);
-      line(`Thời gian: từ ngày ${fromT} đến ngày ${toT}  /  Duration: from ${fromT} to ${toT}`, { name: SERIF, size: 10.5, color: ink }, 16);
-
-      // phần dưới: bảng điểm nằm ngang (cột 2-8) + chữ ký (cột 9-11)
-      const heights = [28, 20, 14, 12, 22, 16];
-      const base = r;
-      heights.forEach((h, k) => { ws.getRow(base + k).height = h; used += h; });
-      const tests = c.showScores ? c.tests.slice(0, MAXT) : [];
-      if (c.showScores && c.tests.length > MAXT) truncated = true;
-      if (tests.length) {
-        const unit = Math.max(1, Math.floor(7 / (tests.length + 1)));
-        const put = (k, head, val, isAvg) => {
-          const c0 = 2 + k * unit, c1 = c0 + unit - 1;
-          span(base, c0, c1, head, { name: SERIF, bold: true, size: 8.5, color: { argb: 'FFFFFFFF' } });
-          span(base + 1, c0, c1, val, { name: SERIF, bold: true, size: isAvg ? 12 : 11, color: { argb: scoreCol(val) } });
-          for (let i = c0; i <= c1; i++) {
-            ws.getCell(base, i).fill = fillBg(NAVY); ws.getCell(base, i).border = thinB; ws.getCell(base + 1, i).border = thinB;
-            ws.getCell(base, i).alignment = { horizontal: 'centerContinuous', vertical: 'middle', wrapText: true };
-            if (isAvg) ws.getCell(base + 1, i).fill = fillBg(TOTAL);
+      // chiều cao các dòng, dùng chung cho hai giấy trong cùng một tờ
+      const hs = [14, 16, 13, 26, 15, 14, 28, 16, 16, 16, 16, 8];
+      if (T) { hs.push(20); for (let k = 0; k < T; k++) hs.push(18); hs.push(18, 8); }
+      hs.push(15, 15, 15, 13, 36, 16);
+      const used = hs.reduce((a, b) => a + b, 0);
+      hs.push(Math.max(2, F - used));
+      hs.forEach((h, k) => { ws.getRow(top + k).height = h; });
+      const last = top + hs.length - 1;
+      pair.forEach((c, side) => {
+        const c0 = side ? 8 : 1, c1 = c0 + 5;
+        let q = top;
+        const next = () => q++;
+        const nl = (text, font) => span(next(), c0, c1, text, font);
+        const fromT = c.from || '…………………', toT = c.to || '…………………';
+        const courseEn = c.courseNameEn || U.enClass(c.courseName);
+        next();
+        nl(c.center.toUpperCase(), { name: SERIF, bold: true, size: 12, color: { argb: BLUE } });
+        nl(c.centerEn || U.centerEn(), { name: SERIF, italic: true, size: 9.5, color: { argb: BLUE } });
+        nl('GIẤY CHỨNG NHẬN', { name: SERIF, bold: true, size: 20, color: { argb: NAVY } });
+        nl('HOÀN THÀNH KHÓA HỌC  ·  CERTIFICATE OF COURSE COMPLETION', { name: SERIF, bold: true, size: 8.5, color: { argb: BLUE } });
+        nl('Chứng nhận học sinh / This is to certify that', { name: SERIF, italic: true, size: 9.5, color: { argb: GRAYTXT } });
+        const nr = next();
+        span(nr, c0, c1, c.student.name.toUpperCase(), { name: SERIF, bold: true, size: 16, color: { argb: 'FFB3261E' } });
+        for (let i = c0 + 1; i <= c1 - 1; i++) ws.getCell(nr, i).border = { bottom: { style: 'thin', color: { argb: GOLD } } };
+        nl(`Đã hoàn thành khóa học: ${c.courseName}${c.classCode ? ' (' + c.classCode + ')' : ''}`, { name: SERIF, size: 10, color: ink });
+        nl(`has successfully completed the course: ${courseEn}`, { name: SERIF, italic: true, size: 9.5, color: ink });
+        nl(`Thời gian: từ ngày ${fromT} đến ngày ${toT}`, { name: SERIF, size: 10, color: ink });
+        nl(`Duration: from ${fromT} to ${toT}`, { name: SERIF, italic: true, size: 9.5, color: ink });
+        next();
+        if (T) {
+          const hr = next();
+          span(hr, c0, c0 + 3, 'Bài kiểm tra / Test', { name: SERIF, bold: true, size: 9, color: { argb: 'FFFFFFFF' } }, 'left');
+          span(hr, c0 + 4, c1, 'Điểm / Score', { name: SERIF, bold: true, size: 9, color: { argb: 'FFFFFFFF' } });
+          for (let i = c0; i <= c1; i++) { ws.getCell(hr, i).fill = fillBg(NAVY); ws.getCell(hr, i).border = thinB; }
+          const tests = c.showScores ? c.tests.slice(0, T) : [];
+          for (let k = 0; k < T; k++) {
+            const row = next(), t = tests[k];
+            span(row, c0, c0 + 3, t ? `${t.title} (${U.shortDate(t.date)})` : '', { name: SERIF, size: 10, color: ink }, 'left');
+            const sc = t && typeof t.score === 'number' ? t.score : null;
+            span(row, c0 + 4, c1, sc, { name: SERIF, bold: true, size: 10.5, color: { argb: scoreCol(sc) } });
+            ws.getCell(row, c0 + 4).numFmt = '0.0#';
+            for (let i = c0; i <= c1; i++) ws.getCell(row, i).border = thinB;
           }
-          ws.getCell(base + 1, c0).numFmt = '0.0#';
-        };
-        tests.forEach((t, k) => put(k, `${t.title}\n${U.shortDate(t.date)}`, typeof t.score === 'number' ? t.score : null, false));
-        put(tests.length, 'Điểm TB\nAverage', c.avg === '' || c.avg === undefined ? null : c.avg, true);
-      }
-      span(base, 9, 11, c.issueDate || U.ISSUE_BLANK, { name: SERIF, italic: true, size: 10, color: ink });
-      span(base + 1, 9, 11, c.org, { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
-      span(base + 2, 9, 11, `${c.signerTitle} / ${c.signerTitleEn || U.enTitle(c.signerTitle)}`, { name: SERIF, bold: true, size: 10, color: { argb: NAVY } });
-      span(base + 3, 9, 11, '(ký tên, đóng dấu) / (Signature & seal)', { name: SERIF, italic: true, size: 8.5, color: { argb: GRAYTXT } });
-      span(base + 5, 9, 11, c.signerName || '', { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
-      r = base + heights.length;
-      blank(Math.max(2, F - used)); // đệm cho đủ chiều cao khung
-      const last = r - 1;
-      for (let rr = top; rr <= last; rr++) {
-        for (let col = 1; col <= N; col++) {
-          const cell = ws.getCell(rr, col);
-          const bd = { ...(cell.border || {}) };
-          if (col === 1) bd.left = dbl;
-          if (col === N) bd.right = dbl;
-          if (rr === top) bd.top = dbl;
-          if (rr === last) bd.bottom = dbl;
-          cell.border = bd;
+          const ar = next();
+          span(ar, c0, c0 + 3, 'Điểm trung bình / Average score', { name: SERIF, bold: true, size: 10, color: { argb: NAVY } }, 'left');
+          const av = c.showScores && c.avg !== '' && c.avg !== undefined && c.avg !== null ? c.avg : null;
+          span(ar, c0 + 4, c1, av, { name: SERIF, bold: true, size: 11, color: { argb: scoreCol(av) } });
+          ws.getCell(ar, c0 + 4).numFmt = '0.0#';
+          for (let i = c0; i <= c1; i++) { ws.getCell(ar, i).fill = fillBg(TOTAL); ws.getCell(ar, i).border = thinB; }
+          next();
         }
-      }
-      blank(G); // khoảng trống giữa hai giấy
-      if ((idx + 1) % 2 === 0 && idx < cards.length - 1) ws.getRow(r - 1).addPageBreak();
-    });
-    ws.pageSetup.printArea = `A1:L${r - 1}`;
+        // khối chữ ký nằm bên phải của giấy
+        const sg = (text, font) => span(next(), c0 + 2, c1, text, font);
+        sg(c.issueDate || U.ISSUE_BLANK, { name: SERIF, italic: true, size: 9.5, color: ink });
+        sg(c.org, { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
+        sg(`${c.signerTitle} / ${c.signerTitleEn || U.enTitle(c.signerTitle)}`, { name: SERIF, bold: true, size: 10, color: { argb: NAVY } });
+        sg('(ký tên, đóng dấu) / (Signature & seal)', { name: SERIF, italic: true, size: 8.5, color: { argb: GRAYTXT } });
+        next();
+        sg(c.signerName || '', { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
+        // viền kép quanh khung
+        for (let rr = top; rr <= last; rr++) {
+          for (let col = c0; col <= c1; col++) {
+            const cell = ws.getCell(rr, col), bd = { ...(cell.border || {}) };
+            if (col === c0) bd.left = dbl;
+            if (col === c1) bd.right = dbl;
+            if (rr === top) bd.top = dbl;
+            if (rr === last) bd.bottom = dbl;
+            cell.border = bd;
+          }
+        }
+      });
+      r = last + 1;
+      if (p + 2 < cards.length) ws.getRow(last).addPageBreak();
+    }
+    ws.pageSetup.printArea = `A1:M${r - 1}`;
     ws.headerFooter = { oddFooter: '' };
     await saveBook(wb, filename);
     if (truncated) U.toast(`Mỗi giấy chỉ hiển thị tối đa ${MAXT} bài kiểm tra đầu tiên.`, 'ok');

@@ -1135,7 +1135,8 @@
     root.innerHTML = `${head('Cài đặt', 'Quy tắc trừ tiền khi vắng, số phút mỗi tiết và thông tin trung tâm. Cách tính học phí (theo buổi nghỉ hay theo buổi đi học) chọn riêng cho từng lớp.')}
       <div class="two-col"><div class="card"><div class="card-h"><h3>Quy tắc học phí & trừ tiền khi vắng</h3></div><div class="card-b">
         <div class="form-grid">
-          <div class="full"><label class="f">Tên trung tâm (in trên phiếu thu)</label><input class="input" id="cn" value="${esc(s.centerName)}"></div>
+          <div><label class="f">Tên trung tâm (in trên phiếu thu, phiếu hoàn thành)</label><input class="input" id="cn" value="${esc(s.centerName)}"></div>
+          <div><label class="f">Center name (English, in trên phiếu hoàn thành)</label><input class="input" id="cne" value="${esc(s.centerNameEn || U.centerEn())}"></div>
           <div><label class="f">Học phí mặc định mỗi tháng (đ)</label><input class="input" type="number" min="0" step="1000" id="df" value="${esc(s.defaultFee)}"><div class="hint">Gợi ý khi tạo lớp mới. Mỗi lớp có thể có học phí riêng.</div></div>
           <div><label class="f">Số phút của 1 tiết</label><input class="input" type="number" min="15" max="120" step="5" id="pm" value="${esc(s.periodMinutes || 45)}"><div class="hint">Dùng để gợi ý số tiết mỗi buổi (ví dụ 17:30-19:00 = 2 tiết).</div></div>
           <div><label class="f">Bắt đầu trừ tiền khi vắng từ (buổi)</label><input class="input" type="number" min="1" max="20" id="dfrom" value="${esc(s.deductFrom)}"><div class="hint">Ví dụ 2: vắng 1 buổi không trừ, vắng từ 2 buổi trở lên mới trừ.</div></div>
@@ -1158,6 +1159,7 @@
     root.querySelector('#save').onclick = async () => {
       const data = {
         centerName: root.querySelector('#cn').value.trim() || U.DEFAULT_SETTINGS.centerName,
+        centerNameEn: root.querySelector('#cne').value.trim() || U.DEFAULT_SETTINGS.centerNameEn,
         defaultFee: Math.max(0, Number(root.querySelector('#df').value) || 0),
         periodMinutes: Math.max(15, Number(root.querySelector('#pm').value) || 45),
         deductFrom: Math.max(1, Math.floor(Number(root.querySelector('#dfrom').value) || 1)),

@@ -125,7 +125,7 @@ window.Views = window.Views || {};
   };
 
 
-  /* In hàng loạt phiếu hoàn thành: chọn nhiều lớp, in phiếu của mọi học sinh trong từng lớp (lớp nào xếp liền lớp đó) */
+  /* In hàng loạt phiếu hoàn thành (song ngữ): chọn nhiều lớp, in phiếu của mọi học sinh trong từng lớp (lớp nào xếp liền lớp đó) */
   async function batchModal() {
     const classes = App.classes.slice().sort((a, b) => a.grade - b.grade || a.code.localeCompare(b.code));
     if (!classes.length) return U.toast('Chưa có lớp nào.', 'err');
@@ -139,21 +139,22 @@ window.Views = window.Views || {};
     const avgOf = (v) => { const n = v.filter((x) => typeof x === 'number'); return n.length ? Math.round((n.reduce((p, c) => p + c, 0) / n.length) * 100) / 100 : ''; };
     const longDate = (d) => { const x = U.parse(d); return `Ngày ${x.getDate()} tháng ${x.getMonth() + 1} năm ${x.getFullYear()}`; };
     const m = U.modal({
-      title: 'In hàng loạt phiếu hoàn thành theo lớp', wide: true, hideFooter: true,
+      title: 'In hàng loạt phiếu hoàn thành theo lớp (song ngữ Anh - Việt)', wide: true, hideFooter: true,
       body: `<label class="f">Chọn các lớp cần in</label>
         <div class="rp-grp" style="margin-bottom:12px"><div class="rp-t">Lớp<button type="button" class="rp-all" id="allc">Chọn / bỏ hết</button></div>
           ${classes.map((c) => `<label class="ck"><input type="checkbox" data-c="${c.id}" ${c.status === 'closed' ? '' : 'checked'}> <b>${esc(c.name)}</b> · ${esc(c.code)} <span class="muted small">· ${act(c).length} học sinh đang học · ${testsOf(c).length} bài kiểm tra${c.status === 'closed' ? ' · lớp đã đóng' : ''}</span></label>`).join('')}</div>
         <div class="form-grid">
-          <div><label class="f">Đơn vị ký</label><input class="input" id="borg" value="${esc(o.org)}"></div>
-          <div><label class="f">Chức danh</label><input class="input" id="btitle" value="${esc(o.title)}"></div>
-          <div><label class="f">Tên người ký (không bắt buộc)</label><input class="input" id="bsigner" value="${esc(o.signer)}"></div>
-          <div><label class="f">Ngày cấp</label><select class="select" id="bissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay)</option></select></div></div>
+          <div><label class="f">Đơn vị ký / Organization</label><input class="input" id="borg" value="${esc(o.org)}"></div>
+          <div><label class="f">Chức danh (Việt)</label><input class="input" id="btitle" value="${esc(o.title)}"></div>
+          <div><label class="f">Title (English)</label><input class="input" id="btitleen" value="${esc(U.enTitle(o.title))}"></div>
+          <div><label class="f">Tên người ký / Signer (không bắt buộc)</label><input class="input" id="bsigner" value="${esc(o.signer)}"></div>
+          <div><label class="f">Ngày cấp / Issue date</label><select class="select" id="bissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay / Today</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay) / Leave blank</option></select></div></div>
         <div class="row" style="margin:12px 0 4px;gap:18px"><label class="ck"><input type="checkbox" id="bsc" ${o.scores ? 'checked' : ''}> Hiện điểm trên phiếu</label>
           <label class="ck"><input type="checkbox" id="bcc" ${o.certCmt ? 'checked' : ''}> Hiện nhận xét trên phiếu</label>
           <label class="ck"><input type="checkbox" id="bsm" ${o.sumCmt ? 'checked' : ''}> Hiện nhận xét trong bảng tổng hợp</label></div>
-        <div class="hint">Thời gian khóa học trên phiếu lấy theo ngày khai giảng của từng lớp đến ngày kết thúc (hoặc hôm nay nếu lớp chưa kết thúc). Mỗi học sinh đang học một phiếu A4, các lớp in nối tiếp nhau.</div>
+        <div class="hint">Phiếu song ngữ Anh - Việt. Thời gian khóa học lấy theo ngày khai giảng của từng lớp đến ngày kết thúc (hoặc hôm nay nếu lớp chưa kết thúc). Mỗi học sinh đang học một phiếu A4, các lớp in nối tiếp nhau. Bản Excel gom tất cả vào một sheet, 2 phiếu trên mỗi tờ A4.</div>
         <div class="alert" id="bsum" style="margin:12px 0"></div>
-        <div class="row"><button class="btn" id="bpc">${icon('printer')} In phiếu hoàn thành</button><button class="btn" id="bps">${icon('printer')} In bảng tổng hợp từng lớp</button><button class="btn ghost" id="bxc">${icon('download')} Xuất Excel phiếu</button><div class="grow"></div><button class="btn ghost" data-x>Đóng</button></div>`,
+        <div class="row"><button class="btn" id="bpc">${icon('printer')} In phiếu hoàn thành</button><button class="btn" id="bps">${icon('printer')} In bảng tổng hợp từng lớp</button><button class="btn ghost" id="bxc">${icon('download')} Xuất Excel phiếu (1 sheet)</button><div class="grow"></div><button class="btn ghost" data-x>Đóng</button></div>`,
     });
     const w = m.el, q = (s2) => w.querySelector(s2);
     const chosen = () => classes.filter((c) => q(`[data-c="${c.id}"]`).checked);
@@ -167,8 +168,10 @@ window.Views = window.Views || {};
       const cl = chosen();
       if (!cl.length) return U.toast('Hãy chọn ít nhất một lớp.', 'err');
       const opt = { org: q('#borg').value.trim() || App.settings.centerName, title: q('#btitle').value.trim(), signer: q('#bsigner').value.trim(), issue: q('#bissue').value, scores: q('#bsc').checked, certCmt: q('#bcc').checked, sumCmt: q('#bsm').checked };
+      const titleEn = q('#btitleen').value.trim() || U.enTitle(opt.title);
       try { localStorage.setItem(KEY, JSON.stringify({ ...o, ...opt })); } catch (er) { /* bỏ qua */ }
-      const center = App.settings.centerName, issue = opt.issue === 'today' ? longDate(today) : '';
+      const center = App.settings.centerName, centerEn = U.centerEn();
+      const issue = opt.issue === 'today' ? longDate(today) : '', issueEn = opt.issue === 'today' ? 'Date: ' + U.enDate(today) : '';
       const perClass = cl.map((c) => {
         const tests = testsOf(c);
         const rows = act(c).map((s) => {
@@ -181,14 +184,14 @@ window.Views = window.Views || {};
       if (!perClass.length) return U.toast('Các lớp đã chọn chưa có học sinh đang học.', 'err');
       if (btn.id === 'bpc') {
         Report.printCertificates(perClass.flatMap((x) => x.rows.map((r) => ({ ...r, course: x.c.name, code: x.c.code, from: x.from, to: x.to }))),
-          { center, showScores: opt.scores, showComments: opt.certCmt, org: opt.org, title: opt.title, signer: opt.signer, issue });
+          { center, centerEn, showScores: opt.scores, showComments: opt.certCmt, org: opt.org, title: opt.title, titleEn, signer: opt.signer, issue, issueEn });
       } else if (btn.id === 'bps') {
         Report.printSummaries(perClass.map((x) => ({
-          center, cls: x.c, teachers: [App.teacherName(x.c.teacherId), x.c.assistantId ? 'Trợ giảng: ' + App.teacherName(x.c.assistantId) : ''].filter(Boolean).join(' · '),
-          from: x.from, to: x.to, tests: x.tests, rows: x.rows, classTotal: x.rows.length, showComments: opt.sumCmt, org: opt.org, title: opt.title, signer: opt.signer, issue,
+          center, centerEn, cls: x.c, teachers: teachersBi(x.c), from: x.from, to: x.to, tests: x.tests, rows: x.rows, classTotal: x.rows.length,
+          showComments: opt.sumCmt, org: opt.org, title: opt.title, titleEn, signer: opt.signer, issue, issueEn,
         })));
       } else {
-        X.exportCertificates(perClass.flatMap((x) => x.rows.map((r) => ({ center, student: r.student, courseName: x.c.name, classCode: x.c.code, from: x.from, to: x.to, tests: r.tests, showScores: opt.scores, avg: opt.scores ? r.avg : '', org: opt.org, signerTitle: opt.title, signerName: opt.signer, issueDate: issue }))), `Giay_chung_nhan_hang_loat_${today}.xlsx`);
+        X.exportCertificates(perClass.flatMap((x) => x.rows.map((r) => ({ center, centerEn, student: r.student, courseName: x.c.name, classCode: x.c.code, from: x.from, to: x.to, tests: r.tests, showScores: opt.scores, avg: opt.scores ? r.avg : '', org: opt.org, signerTitle: opt.title, signerTitleEn: titleEn, signerName: opt.signer, issueDate: issue, issueDateEn: issueEn }))), `Giay_chung_nhan_hang_loat_${today}.xlsx`);
       }
     });
   }
@@ -370,7 +373,8 @@ window.Views = window.Views || {};
   }
 
 
-  /* Tab "Phiếu hoàn thành khóa học": chọn học sinh đã hoàn thành, in phiếu từng em và bảng tổng hợp cả lớp (điểm + nhận xét) */
+  /* Tab "Phiếu hoàn thành khóa học" (song ngữ Anh - Việt): chọn học sinh đã hoàn thành, in phiếu từng em và bảng tổng hợp cả lớp (điểm + nhận xét) */
+  const teachersBi = (c) => [`Giáo viên / Teacher: ${App.teacherName(c.teacherId)}`, c.assistantId ? `Trợ giảng / Assistant: ${App.teacherName(c.assistantId)}` : ''].filter(Boolean).join(' · ');
   async function completePanel(root, cls) {
     const id = cls.id;
     const [students, assess] = await Promise.all([DB.q('students', [['classId', '==', id]]), DB.q('assessments', [['classId', '==', id]])]);
@@ -379,35 +383,37 @@ window.Views = window.Views || {};
     const KEY = 'sky_complete_opts_v1';
     let o = { org: 'TTNN Sky', title: 'Giám đốc', signer: '', issue: 'today', scores: true, certCmt: false, sumCmt: true };
     try { o = { ...o, ...JSON.parse(localStorage.getItem(KEY)) }; } catch (e) { /* bỏ qua */ }
-    const teachers = [App.teacherName(cls.teacherId), cls.assistantId ? 'Trợ giảng: ' + App.teacherName(cls.assistantId) : ''].filter(Boolean).join(' · ');
+    const teachers = teachersBi(cls);
     const today = U.today();
     const scoreOf = (st, a) => (a.scores && a.scores[st.id] != null && a.scores[st.id] !== '' ? Number(a.scores[st.id]) : '');
     const avgOf = (v) => { const n = v.filter((x) => typeof x === 'number'); return n.length ? Math.round((n.reduce((p, c) => p + c, 0) / n.length) * 100) / 100 : ''; };
     const scoreColor = (v) => (typeof v !== 'number' ? undefined : v >= 8 ? 'FF0E7A3E' : v >= 6.5 ? 'FF1F6FEB' : v >= 5 ? 'FFB45309' : 'FFC62828');
     const longDate = (d) => { const x = U.parse(d); return `Ngày ${x.getDate()} tháng ${x.getMonth() + 1} năm ${x.getFullYear()}`; };
 
-    root.innerHTML = `<div class="card"><div class="card-h"><h3>Thông tin phiếu hoàn thành</h3><span class="small muted">Dùng cho cả phiếu từng học sinh và bảng tổng hợp của lớp</span></div><div class="card-b"><div class="form-grid">
-        <div><label class="f">Tên khóa học</label><input class="input" id="cname" value="${esc(cls.name)}"></div>
-        <div><label class="f">Ngày cấp</label><select class="select" id="cissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay)</option></select></div>
-        <div><label class="f">Từ ngày</label><input class="input" type="date" id="cfrom" value="${esc(cls.startDate || '')}"></div>
-        <div><label class="f">Đến ngày</label><input class="input" type="date" id="cto" value="${esc(cls.endDate && cls.endDate < today ? cls.endDate : today)}"></div>
-        <div><label class="f">Đơn vị ký</label><input class="input" id="corg" value="${esc(o.org)}"></div>
-        <div><label class="f">Chức danh</label><input class="input" id="ctitle" value="${esc(o.title)}"></div>
-        <div class="full"><label class="f">Tên người ký (không bắt buộc)</label><input class="input" id="csigner" value="${esc(o.signer)}"></div></div></div></div>
-      <div class="card mt"><div class="card-h"><h3>Bài kiểm tra hiển thị (điểm và nhận xét)</h3><div class="grow"></div><button class="btn sm ghost" id="alltests">Chọn / bỏ hết</button></div><div class="card-b">
+    root.innerHTML = `<div class="card"><div class="card-h"><h3>Thông tin phiếu hoàn thành <span class="muted" style="font-weight:500">/ Certificate details</span></h3><span class="small muted">Phiếu song ngữ Anh - Việt, dùng cho cả phiếu từng học sinh và bảng tổng hợp của lớp</span></div><div class="card-b"><div class="form-grid">
+        <div><label class="f">Tên khóa học (tiếng Việt)</label><input class="input" id="cname" value="${esc(cls.name)}"></div>
+        <div><label class="f">Course name (English)</label><input class="input" id="cnameen" value="${esc(U.enClass(cls.name))}"></div>
+        <div><label class="f">Từ ngày / From</label><input class="input" type="date" id="cfrom" value="${esc(cls.startDate || '')}"></div>
+        <div><label class="f">Đến ngày / To</label><input class="input" type="date" id="cto" value="${esc(cls.endDate && cls.endDate < today ? cls.endDate : today)}"></div>
+        <div><label class="f">Đơn vị ký / Organization</label><input class="input" id="corg" value="${esc(o.org)}"></div>
+        <div><label class="f">Ngày cấp / Issue date</label><select class="select" id="cissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay / Today</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay) / Leave blank</option></select></div>
+        <div><label class="f">Chức danh (tiếng Việt)</label><input class="input" id="ctitle" value="${esc(o.title)}"></div>
+        <div><label class="f">Title (English)</label><input class="input" id="ctitleen" value="${esc(U.enTitle(o.title))}"></div>
+        <div class="full"><label class="f">Tên người ký / Signer (không bắt buộc)</label><input class="input" id="csigner" value="${esc(o.signer)}"></div></div></div></div>
+      <div class="card mt"><div class="card-h"><h3>Bài kiểm tra hiển thị <span class="muted" style="font-weight:500">/ Tests shown</span></h3><div class="grow"></div><button class="btn sm ghost" id="alltests">Chọn / bỏ hết</button></div><div class="card-b">
         ${tests.length ? `<div class="rp-tests">${tests.map((a) => `<label class="ck"><input type="checkbox" data-t="${a.id}" checked> ${esc(a.title)} <span class="muted small">(${U.fmtDate(a.date)})</span></label>`).join('')}</div>` : '<div class="muted">Lớp chưa có bài kiểm tra nào. Vào tab "Điểm kiểm tra" để tạo và nhập điểm.</div>'}
         <div class="row" style="margin-top:12px;gap:18px"><label class="ck"><input type="checkbox" id="oscores" ${o.scores ? 'checked' : ''}> Hiện điểm trên phiếu từng học sinh</label>
           <label class="ck"><input type="checkbox" id="ocert" ${o.certCmt ? 'checked' : ''}> Hiện nhận xét trên phiếu từng học sinh</label>
           <label class="ck"><input type="checkbox" id="osum" ${o.sumCmt ? 'checked' : ''}> Hiện nhận xét trong bảng tổng hợp lớp</label></div></div></div>
-      <div class="card mt"><div class="card-h"><h3>Học sinh đã hoàn thành khóa học</h3><div class="grow"></div><span class="badge ok" id="cnt"></span></div>
+      <div class="card mt"><div class="card-h"><h3>Học sinh đã hoàn thành khóa học <span class="muted" style="font-weight:500">/ Students who completed</span></h3><div class="grow"></div><span class="badge ok" id="cnt"></span></div>
         <div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th class="chk"><input type="checkbox" id="pickall" checked></th><th>#</th><th>Họ và tên</th><th class="center">Số bài đã chấm</th><th class="center">Điểm TB</th></tr></thead><tbody>
           ${list.map((s, i) => { const v = tests.map((a) => scoreOf(s, a)); return `<tr><td class="chk"><input type="checkbox" data-s="${s.id}" checked></td><td class="muted">${i + 1}</td><td class="name">${esc(s.name)}</td><td class="center">${v.filter((x) => x !== '').length}/${tests.length}</td><td class="center"><b>${esc(avgOf(v) === '' ? '–' : avgOf(v))}</b></td></tr>`; }).join('')}</tbody></table>` : empty('students', 'Lớp chưa có học sinh', 'Thêm học sinh ở tab "Học sinh".')}</div>
         <div class="card-b" style="border-top:1px solid var(--line)"><div class="row">
           <button class="btn" id="pcert">${icon('printer')} In phiếu hoàn thành (từng học sinh)</button>
           <button class="btn" id="psum">${icon('printer')} In bảng tổng hợp lớp</button>
-          <button class="btn ghost" id="xcert">${icon('download')} Xuất Excel phiếu</button>
+          <button class="btn ghost" id="xcert">${icon('download')} Xuất Excel phiếu (1 sheet, 2 phiếu / A4)</button>
           <button class="btn ghost" id="xsum">${icon('download')} Xuất Excel tổng hợp lớp</button></div>
-          <div class="hint" style="margin-top:8px">Bấm "In", cửa sổ in của trình duyệt mở ra: chọn máy in hoặc "Lưu thành PDF". Phiếu từng học sinh in khổ A4 dọc, bảng tổng hợp lớp in khổ A4 ngang.</div></div></div>`;
+          <div class="hint" style="margin-top:8px">Mọi nội dung trên phiếu đều song ngữ Anh - Việt. Bấm "In", cửa sổ in của trình duyệt mở ra: chọn máy in hoặc "Lưu thành PDF". Phiếu từng học sinh in A4 dọc, bảng tổng hợp lớp in A4 ngang. File Excel phiếu gom tất cả học sinh vào một sheet, mỗi tờ A4 có 2 phiếu.</div></div></div>`;
 
     const q = (sel) => root.querySelector(sel);
     const count = () => { const n = root.querySelectorAll('[data-s]:checked').length; q('#cnt').textContent = `Đã chọn ${n} / ${list.length} học sinh`; const pa = q('#pickall'); if (pa) pa.checked = n === list.length && n > 0; };
@@ -426,7 +432,11 @@ window.Views = window.Views || {};
       const opt = { org: q('#corg').value.trim() || App.settings.centerName, title: q('#ctitle').value.trim(), signer: q('#csigner').value.trim(), issue: q('#cissue').value, scores: q('#oscores').checked, certCmt: q('#ocert').checked, sumCmt: q('#osum').checked };
       try { localStorage.setItem(KEY, JSON.stringify(opt)); } catch (e) { /* bỏ qua */ }
       const from = q('#cfrom').value, to = q('#cto').value;
-      return { selTests, rows, opt, course: q('#cname').value.trim() || cls.name, from: from ? U.fmtDate(from) : '', to: to ? U.fmtDate(to) : '', issue: opt.issue === 'today' ? longDate(today) : '' };
+      return {
+        selTests, rows, opt, course: q('#cname').value.trim() || cls.name, courseEn: q('#cnameen').value.trim() || U.enClass(cls.name), titleEn: q('#ctitleen').value.trim() || U.enTitle(opt.title),
+        from: from ? U.fmtDate(from) : '', to: to ? U.fmtDate(to) : '',
+        issue: opt.issue === 'today' ? longDate(today) : '', issueEn: opt.issue === 'today' ? 'Date: ' + U.enDate(today) : '',
+      };
     };
     root.onclick = (e) => {
       const t = e.target;
@@ -435,26 +445,26 @@ window.Views = window.Views || {};
       if (!btn) return;
       const g = gather();
       if (!g.rows.length) return U.toast('Hãy chọn ít nhất một học sinh đã hoàn thành.', 'err');
-      const center = App.settings.centerName;
+      const center = App.settings.centerName, centerEn = U.centerEn();
       if (btn.id === 'pcert') {
-        Report.printCertificates(g.rows, { center, course: g.course, code: cls.code, from: g.from, to: g.to, showScores: g.opt.scores, showComments: g.opt.certCmt, org: g.opt.org, title: g.opt.title, signer: g.opt.signer, issue: g.issue });
+        Report.printCertificates(g.rows, { center, centerEn, course: g.course, courseEn: g.courseEn, code: cls.code, from: g.from, to: g.to, showScores: g.opt.scores, showComments: g.opt.certCmt, org: g.opt.org, title: g.opt.title, titleEn: g.titleEn, signer: g.opt.signer, issue: g.issue, issueEn: g.issueEn });
       } else if (btn.id === 'psum') {
-        Report.printSummary({ center, cls, teachers, from: g.from, to: g.to, tests: g.selTests, rows: g.rows, classTotal: list.length, showComments: g.opt.sumCmt, org: g.opt.org, title: g.opt.title, signer: g.opt.signer, issue: g.issue });
+        Report.printSummary({ center, centerEn, cls, teachers, from: g.from, to: g.to, tests: g.selTests, rows: g.rows, classTotal: list.length, showComments: g.opt.sumCmt, org: g.opt.org, title: g.opt.title, titleEn: g.titleEn, signer: g.opt.signer, issue: g.issue, issueEn: g.issueEn });
       } else if (btn.id === 'xcert') {
-        X.exportCertificates(g.rows.map((r) => ({ center, student: r.student, courseName: g.course, classCode: cls.code, from: g.from, to: g.to, tests: r.tests, showScores: g.opt.scores, avg: g.opt.scores ? r.avg : '', org: g.opt.org, signerTitle: g.opt.title, signerName: g.opt.signer, issueDate: g.issue })), `Giay_chung_nhan_${cls.code}.xlsx`);
+        X.exportCertificates(g.rows.map((r) => ({ center, centerEn, student: r.student, courseName: g.course, courseNameEn: g.courseEn, classCode: cls.code, from: g.from, to: g.to, tests: r.tests, showScores: g.opt.scores, avg: g.opt.scores ? r.avg : '', org: g.opt.org, signerTitle: g.opt.title, signerTitleEn: g.titleEn, signerName: g.opt.signer, issueDate: g.issue, issueDateEn: g.issueEn })), `Giay_chung_nhan_${cls.code}.xlsx`);
       } else {
-        const cols = [{ h: 'STT', w: 6, align: 'center' }, { h: 'Họ và tên', w: 28, bold: true }];
+        const cols = [{ h: 'STT\nNo.', w: 7, align: 'center' }, { h: 'Họ và tên\nFull name', w: 28, bold: true }];
         g.selTests.forEach((a) => {
           cols.push({ h: `${a.title}\n${U.shortDate(a.date)}`, w: 12, align: 'center', fmt: '0.0#', bold: true, color: scoreColor });
-          if (g.opt.sumCmt) cols.push({ h: `Nhận xét: ${a.title}`, w: 36, wrap: true });
+          if (g.opt.sumCmt) cols.push({ h: `Nhận xét / Comment:\n${a.title}`, w: 36, wrap: true });
         });
-        cols.push({ h: 'Điểm TB', w: 11, align: 'center', fmt: '0.0#', bold: true, color: scoreColor });
+        cols.push({ h: 'Điểm TB\nAverage', w: 11, align: 'center', fmt: '0.0#', bold: true, color: scoreColor });
         const rows = g.rows.map((r, i) => [i + 1, r.student.name, ...r.tests.flatMap((tt) => (g.opt.sumCmt ? [tt.score, tt.comment] : [tt.score])), r.avg]);
         const avgCol = (idx) => avgOf(g.rows.map((r) => r.tests[idx].score));
-        const total = ['', 'Điểm trung bình lớp', ...g.selTests.flatMap((a, j) => (g.opt.sumCmt ? [avgCol(j), ''] : [avgCol(j)])), avgOf(g.rows.map((r) => r.avg))];
+        const total = ['', 'Điểm trung bình lớp / Class average', ...g.selTests.flatMap((a, j) => (g.opt.sumCmt ? [avgCol(j), ''] : [avgCol(j)])), avgOf(g.rows.map((r) => r.avg))];
         X.exportTable({
-          name: 'Hoàn thành khóa học', title: `DANH SÁCH HỌC SINH HOÀN THÀNH KHÓA HỌC ${cls.name.toUpperCase()}`, landscape: true,
-          info: [`Lớp: ${cls.name} (${cls.code}) · ${teachers}`, `Thời gian: từ ngày ${g.from || '………'} đến ngày ${g.to || '………'}`, `Tổng số học sinh hoàn thành: ${g.rows.length} / ${list.length} học sinh của lớp`],
+          name: 'Hoàn thành khóa học', title: `DANH SÁCH HỌC SINH HOÀN THÀNH KHÓA HỌC ${cls.name.toUpperCase()}\nLIST OF STUDENTS WHO COMPLETED THE COURSE - ${U.enClass(cls.name).toUpperCase()}`, landscape: true,
+          info: [`Lớp / Class: ${cls.name} / ${U.enClass(cls.name)} (${cls.code}) · ${teachers}`, `Thời gian khóa học / Course duration: từ ngày ${g.from || '………'} đến ngày ${g.to || '………'} (from ${g.from || '………'} to ${g.to || '………'})`, `Tổng số học sinh hoàn thành / Total students completed: ${g.rows.length} / ${list.length}`],
           cols, rows, total: g.selTests.length ? total : undefined, freezeCols: 2, signature: true,
         }, `Tong_hop_hoan_thanh_${cls.code}.xlsx`);
       }

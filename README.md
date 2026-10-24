@@ -16,6 +16,7 @@ Web app thuần HTML/CSS/JS (không cần cài đặt hay build), lưu dữ li�
 - Trang của mỗi lớp có tab **Điểm danh**: xem các buổi đã học **từ khi mở lớp đến hôm nay**, theo tháng hoặc theo tuần, và nút **Điểm danh nhanh nhiều ngày** (cho tất cả học sinh có mặt đủ nhiều buổi cùng lúc, có thể chỉ điền các buổi chưa điểm danh).
 - Tab **Phiếu hoàn thành khóa học** của lớp: chọn học sinh đã hoàn thành, **in phiếu từng học sinh** (A4 dọc) và **in bảng tổng hợp lớp** (A4 ngang) gồm tổng số học sinh hoàn thành, điểm và nhận xét của các bài kiểm tra; có cả xuất Excel.
 - Trang **Danh sách lớp** có nút **In phiếu hoàn thành hàng loạt**: chọn nhiều lớp, in phiếu của mọi học sinh từng lớp (lớp nào xếp liền lớp đó) và bảng tổng hợp mỗi lớp một trang; có cả xuất Excel.
+- **Phiếu hoàn thành song ngữ Anh - Việt** (in và Excel): tiêu đề, nhãn, tên cột, chữ ký đều có cả hai ngôn ngữ; tên trung tâm tiếng Anh đặt ở Cài đặt. Bản Excel gom mọi học sinh vào **1 sheet, mỗi tờ A4 có 2 phiếu**.
 - Mỗi học sinh có **ngày bắt đầu học**: vào lớp giữa chừng thì điểm danh và học phí chỉ tính từ ngày đó (học phí cố định được tính theo tỷ lệ số buổi có theo học).
 - **Báo cáo học sinh** (Excel): tải riêng từng học sinh, các em đã chọn hoặc cả lớp; bật/tắt từng mục (thông tin, điểm từng bài, số buổi đi học, học phí tháng...). Lựa chọn được nhớ cho lần sau.
 - Trong **Xuất báo cáo** có 3 kiểu: bảng tổng hợp, **bảng kết quả học tập từng học sinh** (xếp dọc, chọn bài kiểm tra nào hiển thị) và **giấy chứng nhận hoàn thành khóa học** (mỗi học sinh một sheet, in A4).

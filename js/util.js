@@ -58,7 +58,17 @@
   U.initials = (name) => { const w = String(name || '?').trim().split(/\s+/); return (w[w.length - 1][0] || '?').toUpperCase(); };
 
   /* ---------- Học phí ---------- */
-  U.DEFAULT_SETTINGS = { centerName: 'Trung tâm ngoại ngữ Sky', defaultFee: 400000, deductFrom: 2, deductAmount: 50000, periodMinutes: 45 };
+  U.DEFAULT_SETTINGS = { centerName: 'Trung tâm ngoại ngữ Sky', centerNameEn: 'Sky Foreign Language Center', defaultFee: 400000, deductFrom: 2, deductAmount: 50000, periodMinutes: 45 };
+
+  /* ---------- Song ngữ Anh - Việt (phiếu hoàn thành) ---------- */
+  U.enClass = (n) => String(n || '').replace(/^\s*Lớp\s*/i, 'Class ').trim();
+  const TITLE_EN = { 'giam doc': 'Director', 'pho giam doc': 'Deputy Director', 'hieu truong': 'Principal', 'pho hieu truong': 'Vice Principal', 'chu trung tam': 'Center Owner', 'quan ly': 'Manager', 'giao vien': 'Teacher', 'truong phong': 'Head of Department' };
+  U.enTitle = (t) => TITLE_EN[U.norm(t)] || t;
+  const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  U.enDate = (ymd) => { const d = U.parse(ymd); return `${d.getDate()} ${MONTHS_EN[d.getMonth()]} ${d.getFullYear()}`; };
+  U.centerEn = () => { const st = window.App && App.settings ? App.settings : U.DEFAULT_SETTINGS; return st.centerNameEn || (U.norm(st.centerName) === 'trung tam ngoai ngu sky' ? 'Sky Foreign Language Center' : st.centerName); };
+  U.ISSUE_BLANK = 'Ngày ……… tháng ……… năm ………';
+  U.ISSUE_BLANK_EN = 'Date: ……… / ……… / ………';
 
   /* ---------- Giáo viên của lớp & tiết dạy ---------- */
   U.classTeachers = (cls) => [cls.teacherId, cls.assistantId].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);

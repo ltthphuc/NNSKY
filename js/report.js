@@ -183,7 +183,7 @@
         center: App.settings.centerName, student: s, courseName: o.p_course || c.name, classCode: c.code,
         from: o.c_blank || !from ? '' : U.fmtDate(from), to: o.c_blank || !to ? '' : U.fmtDate(to),
         tests, showScores: o.c_scores, avg: o.c_avg ? avgOf(tests.map((t) => t.score)) : '',
-        org: o.p_org || App.settings.centerName, signerTitle: o.p_title, signerName: o.p_signer, issueDate: o.p_issue === 'today' ? fmtLong(today) : '',
+        org: o.p_org || App.settings.centerName, signerTitle: o.p_title, signerName: o.p_signer, issueDate: o.p_issue === 'today' ? fmtLong(today) : '', issueDateEn: o.p_issue === 'today' ? 'Date: ' + U.enDate(today) : '',
       };
     });
     await X.exportCertificates(cards, fname('Giay_chung_nhan', list));
@@ -334,38 +334,63 @@
   const wrap = (css, body) => `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>In</title><style>${css}</style></head><body>${body}</body></html>`;
   const fmtScore = (v) => (typeof v === 'number' ? String(Math.round(v * 100) / 100).replace('.', ',') : '');
 
-  /* cards: [{ student, tests:[{title,date,score,comment}], avg }]; o: { center, course, code, from, to, showScores, showComments, org, title, signer, issue } */
+  const EXTRA_CSS = `
+    .en { font-style: italic; color: #51607a; }
+    .orgen { font-size: 11pt; font-style: italic; color: #51607a; margin-top: 1mm; }
+    h3 { margin: -5mm 0 7mm; font-size: 13.5pt; color: #1f6feb; letter-spacing: 2.5px; }
+    .lead .en { display: block; font-size: 11.5pt; }
+    p.en { margin: 0 0 2mm; font-size: 12pt; }
+    th .en { color: #cfe0ff; font-weight: normal; }
+    td .en { font-weight: normal; }
+    table.sc th:nth-child(2), table.sc td.s { width: 30mm; }
+  `;
+  const issuePair = (o) => `<div class="date">${esc(o.issue || U.ISSUE_BLANK)}<br><span class="en" style="font-size:11pt">${esc(o.issueEn || U.ISSUE_BLANK_EN)}</span></div>`;
+
+  /*
+   * Phiếu hoàn thành SONG NGỮ Anh - Việt (mỗi học sinh một tờ A4 dọc)
+   * cards: [{ student, tests:[{title,date,score,comment}], avg, course?, courseEn?, code?, from?, to? }]
+   * o: { center, centerEn, course, courseEn, code, from, to, showScores, showComments, org, title, titleEn, signer, issue, issueEn }
+   */
   function printCertificates(cards, o) {
-    const html = cards.map((c) => `<section class="cert"><div class="in">
-      <div class="org">${esc(o.center.toUpperCase())}</div><div class="star">✦ &nbsp;✦ &nbsp;✦</div>
-      <h1>GIẤY CHỨNG NHẬN</h1><h2>HOÀN THÀNH KHÓA HỌC</h2>
-      <div class="lead">Chứng nhận học sinh</div><div class="name">${esc(c.student.name.toUpperCase())}</div>
-      <p class="course">Đã hoàn thành khóa học: <b>${esc(c.course || o.course)}</b>${(c.code || o.code) ? ` (${esc(c.code || o.code)})` : ''}</p>
-      <p class="time">Thời gian: từ ngày ${esc((c.from !== undefined ? c.from : o.from) || '………………')} đến ngày ${esc((c.to !== undefined ? c.to : o.to) || '………………')}</p>
-      ${o.showScores && c.tests.length ? `<table class="sc"><thead><tr><th>Bài kiểm tra</th><th style="text-align:center">Điểm</th>${o.showComments ? '<th>Nhận xét</th>' : ''}</tr></thead><tbody>
+    const centerEn = o.centerEn || U.centerEn();
+    const html = cards.map((c) => {
+      const course = c.course || o.course, code = c.code || o.code;
+      const courseEn = c.courseEn || (c.course ? U.enClass(c.course) : o.courseEn || U.enClass(o.course));
+      const from = (c.from !== undefined ? c.from : o.from) || '………………', to = (c.to !== undefined ? c.to : o.to) || '………………';
+      return `<section class="cert"><div class="in">
+      <div class="org">${esc(o.center.toUpperCase())}</div><div class="orgen">${esc(centerEn)}</div><div class="star">✦ &nbsp;✦ &nbsp;✦</div>
+      <h1>GIẤY CHỨNG NHẬN</h1><h2>HOÀN THÀNH KHÓA HỌC</h2><h3>CERTIFICATE OF COURSE COMPLETION</h3>
+      <div class="lead">Chứng nhận học sinh<span class="en">This is to certify that</span></div><div class="name">${esc(c.student.name.toUpperCase())}</div>
+      <p class="course">Đã hoàn thành khóa học: <b>${esc(course)}</b>${code ? ` (${esc(code)})` : ''}</p>
+      <p class="en">has successfully completed the course: <b>${esc(courseEn)}</b></p>
+      <p class="time">Thời gian: từ ngày ${esc(from)} đến ngày ${esc(to)}</p>
+      <p class="en">Duration: from ${esc(from)} to ${esc(to)}</p>
+      ${o.showScores && c.tests.length ? `<table class="sc"><thead><tr><th>Bài kiểm tra <span class="en">/ Test</span></th><th style="text-align:center">Điểm <span class="en">/ Score</span></th>${o.showComments ? '<th>Nhận xét <span class="en">/ Comment</span></th>' : ''}</tr></thead><tbody>
         ${c.tests.map((t) => `<tr><td>${esc(t.title)} (${esc(U.shortDate(t.date))})</td><td class="s ${scoreCls(t.score)}">${esc(fmtScore(t.score))}</td>${o.showComments ? `<td class="cm">${esc(t.comment)}</td>` : ''}</tr>`).join('')}
-        ${c.avg !== '' ? `<tr class="avg"><td>Điểm trung bình</td><td class="s">${esc(fmtScore(c.avg))}</td>${o.showComments ? '<td></td>' : ''}</tr>` : ''}</tbody></table>` : ''}
+        ${c.avg !== '' ? `<tr class="avg"><td>Điểm trung bình <span class="en">/ Average score</span></td><td class="s">${esc(fmtScore(c.avg))}</td>${o.showComments ? '<td></td>' : ''}</tr>` : ''}</tbody></table>` : ''}
       <div class="grow"></div>
-      <div class="sign"><div class="date">${esc(o.issue || 'Ngày ……… tháng ……… năm ………')}</div>
-        <div class="box"><b>${esc(o.org)}</b><br><b>${esc(o.title)}</b><br><i style="font-size:10pt">(ký tên, đóng dấu)</i><div class="gap"></div><b>${esc(o.signer || '')}</b></div></div>
-    </div></section>`).join('');
-    U.printHTML(wrap(PRINT_CSS, html));
+      <div class="sign">${issuePair(o)}
+        <div class="box"><b>${esc(o.org)}</b><br><b>${esc(o.title)}</b> <span class="en">/ ${esc(o.titleEn || U.enTitle(o.title))}</span><br><i style="font-size:10pt">(ký tên, đóng dấu) / (Signature &amp; seal)</i><div class="gap"></div><b>${esc(o.signer || '')}</b></div></div>
+    </div></section>`;
+    }).join('');
+    U.printHTML(wrap(PRINT_CSS + EXTRA_CSS, html));
   }
 
-  /* d: { center, cls, teachers, from, to, tests, rows:[{student,tests,avg}], classTotal, showComments, org, title, signer, issue } */
+  /* d: { center, centerEn, cls, teachers, from, to, tests, rows:[{student,tests,avg}], classTotal, showComments, org, title, titleEn, signer, issue, issueEn } */
   function summaryHtml(d) {
     const avgOf2 = (arr) => { const v = arr.filter((x) => typeof x === 'number'); return v.length ? Math.round((v.reduce((p, c) => p + c, 0) / v.length) * 100) / 100 : ''; };
+    const from = d.from || '………………', to = d.to || '………………';
     const head = d.tests.map((a) => `<th>${esc(a.title)}<br><small>${esc(U.shortDate(a.date))}</small></th>`).join('');
     const body = d.rows.map((r, i) => `<tr><td class="n">${i + 1}</td><td class="nm">${esc(r.student.name)}</td>${r.tests.map((t) => `<td class="s"><b class="${scoreCls(t.score)}">${esc(fmtScore(t.score)) || '–'}</b>${d.showComments && t.comment ? `<small>${esc(t.comment)}</small>` : ''}</td>`).join('')}<td class="s"><b class="${scoreCls(r.avg)}">${esc(fmtScore(r.avg)) || '–'}</b></td></tr>`).join('');
-    const foot = `<tr><td colspan="2" style="text-align:right">Điểm trung bình lớp</td>${d.tests.map((a, j) => `<td class="s">${esc(fmtScore(avgOf2(d.rows.map((r) => r.tests[j].score))))}</td>`).join('')}<td class="s">${esc(fmtScore(avgOf2(d.rows.map((r) => r.avg))))}</td></tr>`;
-    const html = `<div class="c"><div class="org">${esc(d.center.toUpperCase())}</div><h1>DANH SÁCH HỌC SINH HOÀN THÀNH KHÓA HỌC</h1>
-      <div class="meta"><b>${esc(d.cls.name)}</b> (${esc(d.cls.code)}) · ${esc(d.teachers)}</div>
-      <div class="meta">Thời gian khóa học: từ ngày ${esc(d.from || '………………')} đến ngày ${esc(d.to || '………………')}</div>
-      <div class="total">Tổng số học sinh hoàn thành: ${d.rows.length}${d.classTotal ? ` / ${d.classTotal} học sinh của lớp` : ''}</div></div>
-      <table><thead><tr><th>STT</th><th>Họ và tên</th>${head}<th>Điểm TB</th></tr></thead><tbody>${body}</tbody>${d.tests.length ? `<tfoot>${foot}</tfoot>` : ''}</table>
-      <div class="sign"><div><i>${esc(d.issue || 'Ngày ……… tháng ……… năm ………')}</i><br><b>Giáo viên phụ trách</b><br><i style="font-size:9pt">(ký, ghi rõ họ tên)</i><div class="gap"></div></div>
-        <div><i>&nbsp;</i><br><b>${esc(d.org)} - ${esc(d.title)}</b><br><i style="font-size:9pt">(ký tên, đóng dấu)</i><div class="gap"></div><b>${esc(d.signer || '')}</b></div></div>`;
-    return html;
+    const foot = `<tr><td colspan="2" style="text-align:right">Điểm trung bình lớp / Class average</td>${d.tests.map((a, j) => `<td class="s">${esc(fmtScore(avgOf2(d.rows.map((r) => r.tests[j].score))))}</td>`).join('')}<td class="s">${esc(fmtScore(avgOf2(d.rows.map((r) => r.avg))))}</td></tr>`;
+    return `<div class="c"><div class="org">${esc(d.center.toUpperCase())} · ${esc(d.centerEn || U.centerEn())}</div>
+      <h1>DANH SÁCH HỌC SINH HOÀN THÀNH KHÓA HỌC</h1><div class="meta" style="font-weight:bold;letter-spacing:.4px">LIST OF STUDENTS WHO COMPLETED THE COURSE</div>
+      <div class="meta">Lớp / Class: <b>${esc(d.cls.name)} / ${esc(U.enClass(d.cls.name))}</b> (${esc(d.cls.code)}) · ${esc(d.teachers)}</div>
+      <div class="meta">Thời gian khóa học / Course duration: từ ngày ${esc(from)} đến ngày ${esc(to)} (from ${esc(from)} to ${esc(to)})</div>
+      <div class="total">Tổng số học sinh hoàn thành / Total students completed: ${d.rows.length}${d.classTotal ? ` / ${d.classTotal}` : ''}</div></div>
+      <table><thead><tr><th>STT<br><small>No.</small></th><th>Họ và tên<br><small>Full name</small></th>${head}<th>Điểm TB<br><small>Average</small></th></tr></thead><tbody>${body}</tbody>${d.tests.length ? `<tfoot>${foot}</tfoot>` : ''}</table>
+      <div class="sign"><div><i>${esc(d.issue || U.ISSUE_BLANK)}<br>${esc(d.issueEn || U.ISSUE_BLANK_EN)}</i><br><b>Giáo viên phụ trách / Teacher in charge</b><br><i style="font-size:9pt">(ký, ghi rõ họ tên) / (Signature &amp; full name)</i><div class="gap"></div></div>
+        <div><i>&nbsp;</i><br><b>${esc(d.org)} - ${esc(d.title)} / ${esc(d.titleEn || U.enTitle(d.title))}</b><br><i style="font-size:9pt">(ký tên, đóng dấu) / (Signature &amp; seal)</i><div class="gap"></div><b>${esc(d.signer || '')}</b></div></div>`;
   }
   const printSummary = (d) => U.printHTML(wrap(SUM_CSS, summaryHtml(d)));
   const printSummaries = (arr) => U.printHTML(wrap(SUM_CSS, arr.map((d) => `<div class="sec">${summaryHtml(d)}</div>`).join('')));

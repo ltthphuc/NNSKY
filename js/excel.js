@@ -524,84 +524,75 @@
   });
 
   /*
-   * Giấy chứng nhận SONG NGỮ Anh - Việt: TẤT CẢ học sinh trong 1 sheet, mỗi tờ A4 dọc in 2 giấy (mỗi giấy nửa tờ).
-   * card: { center, centerEn?, student, courseName, courseNameEn?, classCode, from, to, tests, avg, showScores, org, signerTitle, signerTitleEn?, signerName, issueDate, issueDateEn? }
-   * Nếu có giấy nhiều bài kiểm tra quá nửa tờ không đủ chỗ thì cả file chuyển sang 1 giấy / tờ.
+   * Giấy chứng nhận SONG NGỮ Anh - Việt: TẤT CẢ học sinh trong 1 sheet.
+   * Tờ A4 NGANG, mỗi tờ in 2 giấy xếp trên - dưới (mỗi giấy 1/2 tờ, dài hết khổ giấy), có khoảng trống giữa hai giấy.
+   * Bảng điểm xếp theo hàng ngang (mỗi bài kiểm tra một cột), chữ ký nằm bên phải.
+   * card: { center, centerEn?, student, courseName, courseNameEn?, classCode, from, to, tests, avg, showScores, org, signerTitle, signerTitleEn?, signerName, issueDate }
    */
   X.exportCertificates = safe(async (cards, filename) => {
     const wb = newBook();
-    const SERIF = 'Times New Roman', GOLD = 'FFB8860B', N = 6, ROW = 14;
+    const SERIF = 'Times New Roman', GOLD = 'FFB8860B', N = 12, MAXT = 6;
+    const F = 248, G = 8; // chiều cao khung mỗi giấy và khoảng trống giữa các giấy (point)
     const ws = wb.addWorksheet('Giấy chứng nhận', {
-      pageSetup: { ...pageSetup(false), fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
+      pageSetup: { ...pageSetup(true), fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
       views: [{ showGridLines: false }],
     });
-    for (let i = 1; i <= N; i++) ws.getColumn(i).width = 15;
-    const BASE = 274; // phần cố định của một giấy (tiêu đề song ngữ, tên, chữ ký) tính bằng point
-    const withScores = (c) => c.showScores && c.tests.length;
-    const need = (c) => BASE + (withScores(c) ? (3 + c.tests.length) * ROW : 0);
-    const HALF = 376;
-    const perPage = cards.some((c) => need(c) > HALF) ? 1 : 2;
-    const budget = perPage === 2 ? HALF : 750;
+    for (let i = 1; i <= N; i++) ws.getColumn(i).width = 11.5;
     const dbl = { style: 'double', color: { argb: NAVY } };
     const ink = { argb: 'FF1B2B45' };
-    let r = 1;
+    const thinB = { top: { style: 'thin', color: { argb: LINE } }, left: { style: 'thin', color: { argb: LINE } }, bottom: { style: 'thin', color: { argb: LINE } }, right: { style: 'thin', color: { argb: LINE } } };
+    let r = 1, truncated = false;
     cards.forEach((c, idx) => {
       const top = r;
       let used = 0;
       const row = (h) => { ws.getRow(r).height = h; used += h; };
       const blank = (h) => { row(h); r++; };
-      const line = (text, font, h, align = 'centerContinuous', from = 1) => {
-        for (let i = from; i <= N; i++) ws.getCell(r, i).alignment = { horizontal: align, vertical: 'middle' };
-        const cell = ws.getCell(r, from); cell.value = text; cell.font = font;
-        row(h); r++;
+      const span = (rr, from, to, text, font) => {
+        for (let i = from; i <= to; i++) ws.getCell(rr, i).alignment = { horizontal: 'centerContinuous', vertical: 'middle', wrapText: false };
+        const cell = ws.getCell(rr, from); cell.value = text; cell.font = font;
       };
+      const line = (text, font, h) => { span(r, 1, N, text, font); row(h); r++; };
       const fromT = c.from || '…………………', toT = c.to || '…………………';
       const courseEn = c.courseNameEn || U.enClass(c.courseName);
-      blank(3);
-      line(c.center.toUpperCase(), { name: SERIF, bold: true, size: 12, color: { argb: BLUE } }, 16);
-      line(c.centerEn || U.centerEn(), { name: SERIF, italic: true, size: 9.5, color: { argb: GRAYTXT } }, 13);
-      line('GIẤY CHỨNG NHẬN', { name: SERIF, bold: true, size: 20, color: { argb: NAVY } }, 26);
-      line('HOÀN THÀNH KHÓA HỌC', { name: SERIF, bold: true, size: 11.5, color: { argb: BLUE } }, 16);
-      line('CERTIFICATE OF COURSE COMPLETION', { name: SERIF, bold: true, size: 10, color: { argb: BLUE } }, 14);
+      blank(12);
+      line(`${c.center.toUpperCase()}  ·  ${c.centerEn || U.centerEn()}`, { name: SERIF, bold: true, size: 12, color: { argb: BLUE } }, 16);
+      line('GIẤY CHỨNG NHẬN HOÀN THÀNH KHÓA HỌC', { name: SERIF, bold: true, size: 19, color: { argb: NAVY } }, 26);
+      line('CERTIFICATE OF COURSE COMPLETION', { name: SERIF, bold: true, size: 10.5, color: { argb: BLUE } }, 15);
       line('Chứng nhận học sinh / This is to certify that', { name: SERIF, italic: true, size: 9.5, color: { argb: GRAYTXT } }, 14);
-      line(c.student.name.toUpperCase(), { name: SERIF, bold: true, size: 16, color: { argb: 'FFB3261E' } }, 25);
-      for (let i = 2; i <= 5; i++) ws.getCell(r - 1, i).border = { bottom: { style: 'thin', color: { argb: GOLD } } };
-      line(`Đã hoàn thành khóa học: ${c.courseName}${c.classCode ? ' (' + c.classCode + ')' : ''}`, { name: SERIF, size: 10.5, color: ink }, 15);
-      line(`has successfully completed the course: ${courseEn}`, { name: SERIF, italic: true, size: 9.5, color: ink }, 13);
-      line(`Thời gian: từ ngày ${fromT} đến ngày ${toT}`, { name: SERIF, size: 10.5, color: ink }, 15);
-      line(`Duration: from ${fromT} to ${toT}`, { name: SERIF, italic: true, size: 9.5, color: ink }, 13);
-      blank(3);
-      if (withScores(c)) {
-        const cell2 = (colA, a, colB, b2, font, fill) => {
-          const x = ws.getCell(r, colA), y = ws.getCell(r, colB);
-          x.value = a; y.value = b2; x.font = font; y.font = font; x.alignment = { vertical: 'middle' }; y.alignment = { horizontal: 'center', vertical: 'middle' };
-          if (fill) for (let i = colA; i <= colB; i++) ws.getCell(r, i).fill = fillBg(fill);
+      line(c.student.name.toUpperCase(), { name: SERIF, bold: true, size: 18, color: { argb: 'FFB3261E' } }, 27);
+      for (let i = 4; i <= 9; i++) ws.getCell(r - 1, i).border = { bottom: { style: 'thin', color: { argb: GOLD } } };
+      line(`Đã hoàn thành khóa học: ${c.courseName}${c.classCode ? ' (' + c.classCode + ')' : ''}  /  has successfully completed the course: ${courseEn}`, { name: SERIF, size: 10.5, color: ink }, 16);
+      line(`Thời gian: từ ngày ${fromT} đến ngày ${toT}  /  Duration: from ${fromT} to ${toT}`, { name: SERIF, size: 10.5, color: ink }, 16);
+
+      // phần dưới: bảng điểm nằm ngang (cột 2-8) + chữ ký (cột 9-11)
+      const heights = [28, 20, 14, 12, 22, 16];
+      const base = r;
+      heights.forEach((h, k) => { ws.getRow(base + k).height = h; used += h; });
+      const tests = c.showScores ? c.tests.slice(0, MAXT) : [];
+      if (c.showScores && c.tests.length > MAXT) truncated = true;
+      if (tests.length) {
+        const unit = Math.max(1, Math.floor(7 / (tests.length + 1)));
+        const put = (k, head, val, isAvg) => {
+          const c0 = 2 + k * unit, c1 = c0 + unit - 1;
+          span(base, c0, c1, head, { name: SERIF, bold: true, size: 8.5, color: { argb: 'FFFFFFFF' } });
+          span(base + 1, c0, c1, val, { name: SERIF, bold: true, size: isAvg ? 12 : 11, color: { argb: scoreCol(val) } });
+          for (let i = c0; i <= c1; i++) {
+            ws.getCell(base, i).fill = fillBg(NAVY); ws.getCell(base, i).border = thinB; ws.getCell(base + 1, i).border = thinB;
+            ws.getCell(base, i).alignment = { horizontal: 'centerContinuous', vertical: 'middle', wrapText: true };
+            if (isAvg) ws.getCell(base + 1, i).fill = fillBg(TOTAL);
+          }
+          ws.getCell(base + 1, c0).numFmt = '0.0#';
         };
-        cell2(2, 'Bài kiểm tra / Test', 5, 'Điểm / Score', { name: SERIF, bold: true, size: 9.5, color: { argb: 'FFFFFFFF' } }, NAVY); row(ROW); r++;
-        c.tests.forEach((t) => {
-          const x = ws.getCell(r, 2), y = ws.getCell(r, 5);
-          x.value = `${t.title} (${U.shortDate(t.date)})`; x.font = { name: SERIF, size: 10 }; x.alignment = { vertical: 'middle' };
-          y.value = typeof t.score === 'number' ? t.score : null; y.numFmt = '0.0#'; y.font = { name: SERIF, bold: true, size: 10.5, color: { argb: scoreCol(t.score) } }; y.alignment = { horizontal: 'center', vertical: 'middle' };
-          for (let i = 2; i <= 5; i++) ws.getCell(r, i).border = { bottom: { style: 'hair', color: { argb: 'FF9AA7BD' } } };
-          row(ROW); r++;
-        });
-        if (c.avg !== '' && c.avg !== null && c.avg !== undefined) {
-          const x = ws.getCell(r, 2), y = ws.getCell(r, 5);
-          x.value = 'Điểm trung bình / Average score'; x.font = { name: SERIF, bold: true, size: 10, color: { argb: NAVY } };
-          y.value = c.avg; y.numFmt = '0.0#'; y.font = { name: SERIF, bold: true, size: 11, color: { argb: scoreCol(c.avg) } }; y.alignment = { horizontal: 'center' };
-          for (let i = 2; i <= 5; i++) ws.getCell(r, i).fill = fillBg(TOTAL);
-          row(ROW); r++;
-        }
-        blank(3);
+        tests.forEach((t, k) => put(k, `${t.title}\n${U.shortDate(t.date)}`, typeof t.score === 'number' ? t.score : null, false));
+        put(tests.length, 'Điểm TB\nAverage', c.avg === '' || c.avg === undefined ? null : c.avg, true);
       }
-      // chữ ký (bên phải)
-      line(c.issueDate || U.ISSUE_BLANK, { name: SERIF, italic: true, size: 9.5, color: ink }, 15, 'right', 1);
-      line(c.org, { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } }, 14, 'centerContinuous', 5);
-      line(`${c.signerTitle} / ${c.signerTitleEn || U.enTitle(c.signerTitle)}`, { name: SERIF, bold: true, size: 10, color: { argb: NAVY } }, 14, 'centerContinuous', 5);
-      line('(ký tên, đóng dấu) / (Signature & seal)', { name: SERIF, italic: true, size: 8.5, color: { argb: GRAYTXT } }, 12, 'centerContinuous', 5);
-      blank(16);
-      line(c.signerName || '', { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } }, 15, 'centerContinuous', 5);
-      blank(Math.max(3, budget - used)); // đệm cho đủ nửa tờ
+      span(base, 9, 11, c.issueDate || U.ISSUE_BLANK, { name: SERIF, italic: true, size: 10, color: ink });
+      span(base + 1, 9, 11, c.org, { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
+      span(base + 2, 9, 11, `${c.signerTitle} / ${c.signerTitleEn || U.enTitle(c.signerTitle)}`, { name: SERIF, bold: true, size: 10, color: { argb: NAVY } });
+      span(base + 3, 9, 11, '(ký tên, đóng dấu) / (Signature & seal)', { name: SERIF, italic: true, size: 8.5, color: { argb: GRAYTXT } });
+      span(base + 5, 9, 11, c.signerName || '', { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
+      r = base + heights.length;
+      blank(Math.max(2, F - used)); // đệm cho đủ chiều cao khung
       const last = r - 1;
       for (let rr = top; rr <= last; rr++) {
         for (let col = 1; col <= N; col++) {
@@ -614,12 +605,13 @@
           cell.border = bd;
         }
       }
-      if ((idx + 1) % perPage === 0 && idx < cards.length - 1) ws.getRow(last).addPageBreak();
+      blank(G); // khoảng trống giữa hai giấy
+      if ((idx + 1) % 2 === 0 && idx < cards.length - 1) ws.getRow(r - 1).addPageBreak();
     });
-    ws.pageSetup.printArea = `A1:F${r - 1}`;
+    ws.pageSetup.printArea = `A1:L${r - 1}`;
     ws.headerFooter = { oddFooter: '' };
     await saveBook(wb, filename);
-    if (perPage === 1) U.toast('Có giấy nhiều bài kiểm tra nên mỗi trang A4 in 1 giấy. Bỏ bớt bài kiểm tra hiển thị để in 2 giấy / trang.', 'ok');
+    if (truncated) U.toast(`Mỗi giấy chỉ hiển thị tối đa ${MAXT} bài kiểm tra đầu tiên.`, 'ok');
   });
 
   /* ===== Bảng tuỳ chọn cột (báo cáo học sinh) ===== */

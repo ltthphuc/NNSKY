@@ -148,7 +148,8 @@ window.Views = window.Views || {};
           <div><label class="f">Chức danh (Việt)</label><input class="input" id="btitle" value="${esc(o.title)}"></div>
           <div><label class="f">Title (English)</label><input class="input" id="btitleen" value="${esc(U.enTitle(o.title))}"></div>
           <div><label class="f">Tên người ký / Signer (không bắt buộc)</label><input class="input" id="bsigner" value="${esc(o.signer)}"></div>
-          <div><label class="f">Ngày cấp / Issue date</label><select class="select" id="bissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay / Today</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay) / Leave blank</option></select></div></div>
+          <div><label class="f">Ngày ký</label><select class="select" id="bissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay</option><option value="custom" ${o.issue === 'custom' ? 'selected' : ''}>Nhập ngày ký</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay)</option></select>
+          <input class="input ${o.issue === 'custom' ? '' : 'hidden'}" type="date" id="bissuedate" value="${today}" style="margin-top:8px"></div></div>
         <div class="row" style="margin:12px 0 4px;gap:18px"><label class="ck"><input type="checkbox" id="bsc" ${o.scores ? 'checked' : ''}> Hiện điểm trên phiếu</label>
           <label class="ck"><input type="checkbox" id="bcc" ${o.certCmt ? 'checked' : ''}> Hiện nhận xét trên phiếu</label>
           <label class="ck"><input type="checkbox" id="bsm" ${o.sumCmt ? 'checked' : ''}> Hiện nhận xét trong bảng tổng hợp</label></div>
@@ -160,7 +161,10 @@ window.Views = window.Views || {};
     const chosen = () => classes.filter((c) => q(`[data-c="${c.id}"]`).checked);
     const sumText = () => { const cl = chosen(); q('#bsum').textContent = `Đã chọn ${cl.length} lớp, tổng ${cl.reduce((n, c) => n + act(c).length, 0)} phiếu hoàn thành sẽ được in.`; };
     sumText();
-    w.addEventListener('change', (e) => { if (e.target.dataset.c !== undefined) sumText(); });
+    w.addEventListener('change', (e) => {
+      if (e.target.dataset.c !== undefined) sumText();
+      if (e.target.id === 'bissue') q('#bissuedate').classList.toggle('hidden', e.target.value !== 'custom');
+    });
     w.addEventListener('click', (e) => {
       if (e.target.closest('#allc')) { const b = [...w.querySelectorAll('[data-c]')]; const on = b.some((x) => !x.checked); b.forEach((x) => { x.checked = on; }); sumText(); return; }
       const btn = e.target.closest('#bpc, #bps, #bxc');
@@ -171,7 +175,7 @@ window.Views = window.Views || {};
       const titleEn = q('#btitleen').value.trim() || U.enTitle(opt.title);
       try { localStorage.setItem(KEY, JSON.stringify({ ...o, ...opt })); } catch (er) { /* bỏ qua */ }
       const center = App.settings.centerName, centerEn = U.centerEn();
-      const issue = opt.issue === 'today' ? longDate(today) : '', issueEn = opt.issue === 'today' ? 'Date: ' + U.enDate(today) : '';
+      const issue = opt.issue === 'today' ? longDate(today) : opt.issue === 'custom' && q('#bissuedate').value ? longDate(q('#bissuedate').value) : '', issueEn = '';
       const perClass = cl.map((c) => {
         const tests = testsOf(c);
         const rows = act(c).map((s) => {
@@ -396,7 +400,8 @@ window.Views = window.Views || {};
         <div><label class="f">Từ ngày / From</label><input class="input" type="date" id="cfrom" value="${esc(cls.startDate || '')}"></div>
         <div><label class="f">Đến ngày / To</label><input class="input" type="date" id="cto" value="${esc(cls.endDate && cls.endDate < today ? cls.endDate : today)}"></div>
         <div><label class="f">Đơn vị ký / Organization</label><input class="input" id="corg" value="${esc(o.org)}"></div>
-        <div><label class="f">Ngày cấp / Issue date</label><select class="select" id="cissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay / Today</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay) / Leave blank</option></select></div>
+        <div><label class="f">Ngày ký</label><select class="select" id="cissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay</option><option value="custom" ${o.issue === 'custom' ? 'selected' : ''}>Nhập ngày ký</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay)</option></select>
+          <input class="input ${o.issue === 'custom' ? '' : 'hidden'}" type="date" id="cissuedate" value="${today}" style="margin-top:8px"></div>
         <div><label class="f">Chức danh (tiếng Việt)</label><input class="input" id="ctitle" value="${esc(o.title)}"></div>
         <div><label class="f">Title (English)</label><input class="input" id="ctitleen" value="${esc(U.enTitle(o.title))}"></div>
         <div class="full"><label class="f">Tên người ký / Signer (không bắt buộc)</label><input class="input" id="csigner" value="${esc(o.signer)}"></div></div></div></div>
@@ -421,6 +426,7 @@ window.Views = window.Views || {};
     root.onchange = (e) => {
       const t = e.target;
       if (t.id === 'pickall') { root.querySelectorAll('[data-s]').forEach((c) => { c.checked = t.checked; }); }
+      if (t.id === 'cissue') q('#cissuedate').classList.toggle('hidden', t.value !== 'custom');
       count();
     };
     const gather = () => {
@@ -435,7 +441,7 @@ window.Views = window.Views || {};
       return {
         selTests, rows, opt, course: q('#cname').value.trim() || cls.name, courseEn: q('#cnameen').value.trim() || U.enClass(cls.name), titleEn: q('#ctitleen').value.trim() || U.enTitle(opt.title),
         from: from ? U.fmtDate(from) : '', to: to ? U.fmtDate(to) : '',
-        issue: opt.issue === 'today' ? longDate(today) : '', issueEn: opt.issue === 'today' ? 'Date: ' + U.enDate(today) : '',
+        issue: opt.issue === 'today' ? longDate(today) : opt.issue === 'custom' && q('#cissuedate').value ? longDate(q('#cissuedate').value) : '', issueEn: '',
       };
     };
     root.onclick = (e) => {

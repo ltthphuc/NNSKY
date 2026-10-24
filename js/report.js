@@ -81,7 +81,8 @@
           <div class="row" style="flex-wrap:nowrap"><div class="grow"><label class="f">Đơn vị</label><input class="input" data-p="p_org" value="${esc(o0.p_org)}"></div><div class="grow"><label class="f">Chức danh</label><input class="input" data-p="p_title" value="${esc(o0.p_title)}"></div></div>
           <label class="f" style="margin-top:8px">Tên người ký (không bắt buộc)</label><input class="input" data-p="p_signer" value="${esc(o0.p_signer)}"></div>
         <div class="rp-grp"><div class="rp-t">Ngày cấp</div>
-          <select class="select" data-p="p_issue"><option value="blank" ${o0.p_issue === 'blank' ? 'selected' : ''}>Để trống (viết tay)</option><option value="today" ${o0.p_issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay</option></select></div>
+          <select class="select" data-p="p_issue"><option value="blank" ${o0.p_issue === 'blank' ? 'selected' : ''}>Để trống (viết tay)</option><option value="today" ${o0.p_issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay</option><option value="custom" ${o0.p_issue === 'custom' ? 'selected' : ''}>Nhập ngày ký</option></select>
+          <input class="input" type="date" data-p="p_issue_date" value="${today}" style="margin-top:8px"></div>
       </div>
       <div class="rp-grp" data-modes="result cert" style="margin-top:12px"><div class="rp-t">Bài kiểm tra hiển thị<button type="button" class="rp-all" data-alltests>Chọn / bỏ hết</button></div>
         <div class="rp-tests">${testsHtml}</div>
@@ -112,6 +113,9 @@
       const mode = m.el.querySelector('[name=rmode]:checked').value;
       m.el.querySelectorAll('[data-modes]').forEach((el) => { el.style.display = el.dataset.modes.split(' ').includes(mode) ? '' : 'none'; });
     };
+    const issSel = m.el.querySelector('[data-p="p_issue"]'), issDate = m.el.querySelector('[data-p="p_issue_date"]');
+    const issToggle = () => { issDate.style.display = issSel.value === 'custom' ? '' : 'none'; };
+    issSel.onchange = issToggle; issToggle();
     m.el.querySelectorAll('[name=rmode]').forEach((r) => { r.onchange = setMode; });
     setMode();
     m.el.addEventListener('click', (e) => {
@@ -183,7 +187,7 @@
         center: App.settings.centerName, student: s, courseName: o.p_course || c.name, classCode: c.code,
         from: o.c_blank || !from ? '' : U.fmtDate(from), to: o.c_blank || !to ? '' : U.fmtDate(to),
         tests, showScores: o.c_scores, avg: o.c_avg ? avgOf(tests.map((t) => t.score)) : '',
-        org: o.p_org || App.settings.centerName, signerTitle: o.p_title, signerName: o.p_signer, issueDate: o.p_issue === 'today' ? fmtLong(today) : '', issueDateEn: o.p_issue === 'today' ? 'Date: ' + U.enDate(today) : '',
+        org: o.p_org || App.settings.centerName, signerTitle: o.p_title, signerName: o.p_signer, issueDate: o.p_issue === 'today' ? fmtLong(today) : o.p_issue === 'custom' && o.p_issue_date ? fmtLong(o.p_issue_date) : '',
       };
     });
     await X.exportCertificates(cards, fname('Giay_chung_nhan', list));

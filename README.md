@@ -76,3 +76,6 @@ firestore.rules     quy tắc bảo mật Firestore
   - in/tải Word **Báo cáo tình hình hoạt động gửi Sở GD&ĐT** (tự điền số liệu);
   - tải **bộ hồ sơ Excel phục vụ kiểm tra** (tổng hợp, danh sách học sinh/giáo viên, thời khóa biểu, điểm danh, kết quả học tập, học phí, rà soát dữ liệu thiếu, danh mục hồ sơ cần chuẩn bị).
 - Các văn bản pháp luật trong phần "căn cứ" chỉ là gợi ý, hãy đối chiếu quy định hiện hành của địa phương trước khi ban hành.
+
+## Bài đánh giá có cột phụ
+Khi tạo bài đánh giá có thể chọn "Một điểm duy nhất" hoặc "Nhiều thành phần" (Nghe, Nói, Đọc, Viết, Từ vựng, Ngữ pháp hoặc cột tự thêm). Điểm chung tự tính bằng trung bình các cột hoặc tự nhập. Chọn riêng cho từng bài, sửa được trong trang nhập điểm (nút Thành phần điểm); file mẫu và file xuất Excel có thêm các cột phụ.

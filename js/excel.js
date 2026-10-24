@@ -280,42 +280,45 @@
   });
 
   /* ===== Điểm đánh giá ===== */
-  X.scoreTemplate = safe(async (cls, students, title, date) => {
+  X.scoreTemplate = safe(async (cls, students, title, date, parts = [], autoAvg = true) => {
     const wb = newBook();
+    const np = parts.length, ovHead = np ? (autoAvg ? 'Điểm chung (tự tính, có thể để trống)' : 'Điểm chung (0-10)') : 'Điểm (0-10)';
+    const cols = [{ h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, ...parts.map((p) => ({ h: p.name, w: 12, align: 'center', fmt: '0.0#' })), { h: ovHead, w: np ? 16 : 14, align: 'center', fmt: '0.0#' }, { h: 'Nhận xét', w: 52, wrap: true }];
     const { ws, firstRow } = addSheet(wb, {
-      name: 'Nhập điểm', title: 'BẢNG NHẬP ĐIỂM ĐÁNH GIÁ', landscape: false,
-      info: [`Lớp: ${cls.name} (${cls.code})`, `Bài đánh giá: ${title || ''}${date ? ' · Ngày ' + U.fmtDate(date) : ''}`, 'Chỉ điền vào các ô màu vàng (Điểm và Nhận xét).'],
-      cols: [{ h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, { h: 'Điểm (0-10)', w: 14, align: 'center', fmt: '0.0#' }, { h: 'Nhận xét', w: 52, wrap: true }],
-      rows: students.map((s) => [s.code || '', s.name, '', '']),
-      inputCols: [2, 3],
+      name: 'Nhập điểm', title: 'BẢNG NHẬP ĐIỂM ĐÁNH GIÁ', landscape: np > 3,
+      info: [`Lớp: ${cls.name} (${cls.code})`, `Bài đánh giá: ${title || ''}${date ? ' · Ngày ' + U.fmtDate(date) : ''}`, `Chỉ điền vào các ô màu vàng (${np ? 'điểm các cột, ' : 'Điểm và '}Nhận xét).`],
+      cols, rows: students.map((s) => [s.code || '', s.name, ...parts.map(() => ''), '', '']),
+      inputCols: cols.map((c, i) => i).filter((i) => i >= 2),
     });
     students.forEach((s, i) => {
-      ws.getCell(firstRow + i, 3).dataValidation = { type: 'decimal', operator: 'between', formulae: [0, 10], allowBlank: true, showErrorMessage: true, errorTitle: 'Điểm không hợp lệ', error: 'Vui lòng nhập điểm từ 0 đến 10.' };
+      for (let k = 0; k <= np; k++) ws.getCell(firstRow + i, 3 + k).dataValidation = { type: 'decimal', operator: 'between', formulae: [0, 10], allowBlank: true, showErrorMessage: true, errorTitle: 'Điểm không hợp lệ', error: 'Vui lòng nhập điểm từ 0 đến 10.' };
     });
     addGuide(wb, 'HƯỚNG DẪN NHẬP ĐIỂM', [
       `Lớp: ${cls.name} (${cls.code})`,
       `Bài đánh giá: ${title || ''}${date ? ' - ngày ' + U.fmtDate(date) : ''}`,
-      '1. Chỉ điền cột "Điểm (0-10)" và "Nhận xét" (ô màu vàng). Không sửa cột "Mã HS" và "Họ và tên".',
+      `1. Chỉ điền các ô màu vàng${np ? ` (cột ${parts.map((p) => '"' + p.name + '"').join(', ')}, điểm chung và Nhận xét)` : ' (Điểm và Nhận xét)'}. Không sửa cột "Mã HS" và "Họ và tên".`,
       '2. Điểm từ 0 đến 10, có thể dùng số thập phân (ví dụ 8.5 hoặc 8,5).',
-      '3. Để trống điểm nếu học sinh vắng hoặc chưa chấm.',
+      np && autoAvg ? '3. Điểm chung được hệ thống tự tính bằng trung bình các cột thành phần, không cần điền.' : '3. Để trống điểm nếu học sinh vắng hoặc chưa chấm.',
       '4. Lưu file rồi chọn "Nhập từ Excel" trên màn hình Đánh giá.',
     ]);
     await saveBook(wb, `Mau_nhap_diem_${slug(cls.code)}.xlsx`);
   });
 
-  X.parseScores = async (file) => {
+  X.parseScores = async (file, parts = []) => {
     const rows = rowsOf(await X.read(file));
     const hi = headerIndex(rows, (h) => h.some((x) => x.includes('diem')) && h.some((x) => x.includes('ma hs') || x.includes('ho va ten')));
     if (hi < 0) throw new Error('File không đúng mẫu. Hãy dùng "Tải file mẫu" của hệ thống.');
-    const h = rows[hi];
+    const h = rows[hi], hn = h.map((x) => U.norm(x));
     const iCode = findCol(h, 'ma hs', 'ma hoc sinh');
     const iName = findCol(h, 'ho va ten', 'ho ten');
-    const iScore = findCol(h, 'diem');
+    const pIdx = parts.map((p) => hn.findIndex((x) => x === U.norm(p.name)));
+    const iScore = hn.findIndex((x, k) => /^diem/.test(x) && !pIdx.includes(k));
     const iCmt = findCol(h, 'nhan xet');
     return rows.slice(hi + 1).map((r) => ({
       code: iCode >= 0 ? String(r[iCode] || '').trim() : '',
       name: iName >= 0 ? String(r[iName] || '').trim() : '',
-      score: String(r[iScore] ?? '').trim().replace(',', '.'),
+      score: iScore >= 0 ? String(r[iScore] ?? '').trim().replace(',', '.') : '',
+      parts: Object.fromEntries(parts.map((p, k) => [p.id, pIdx[k] >= 0 ? String(r[pIdx[k]] ?? '').trim().replace(',', '.') : ''])),
       comment: iCmt >= 0 ? String(r[iCmt] || '').trim() : '',
     }));
   };
@@ -325,13 +328,17 @@
 
   X.exportScores = safe(async (cls, a, students) => {
     const wb = newBook();
+    const parts = a.parts || [], np = parts.length;
     const vals = students.map((s) => (a.scores && a.scores[s.id] != null ? Number(a.scores[s.id]) : ''));
+    const pv = (s, p) => (a.partScores && a.partScores[s.id] && a.partScores[s.id][p.id] != null ? Number(a.partScores[s.id][p.id]) : '');
     addSheet(wb, {
-      name: 'Điểm', title: 'BẢNG ĐIỂM ĐÁNH GIÁ', landscape: false,
+      name: 'Điểm', title: 'BẢNG ĐIỂM ĐÁNH GIÁ', landscape: np > 3,
       info: [`Lớp: ${cls.name} (${cls.code})`, `Bài đánh giá: ${a.title} · Ngày ${U.fmtDate(a.date)}`],
-      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, { h: 'Điểm', w: 10, align: 'center', fmt: '0.0#', bold: true, color: scoreColor }, { h: 'Nhận xét', w: 52, wrap: true }],
-      rows: students.map((s, i) => [i + 1, s.code || '', s.name, vals[i], (a.comments && a.comments[s.id]) || '']),
-      total: ['', '', 'Điểm trung bình lớp', avgOf(vals), ''], signature: true,
+      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true },
+        ...parts.map((p) => ({ h: p.name, w: 11, align: 'center', fmt: '0.0#', color: scoreColor })),
+        { h: np ? 'Điểm chung' : 'Điểm', w: 11, align: 'center', fmt: '0.0#', bold: true, color: scoreColor }, { h: 'Nhận xét', w: 52, wrap: true }],
+      rows: students.map((s, i) => [i + 1, s.code || '', s.name, ...parts.map((p) => pv(s, p)), vals[i], (a.comments && a.comments[s.id]) || '']),
+      total: ['', '', 'Điểm trung bình lớp', ...parts.map((p) => avgOf(students.map((s) => pv(s, p)))), avgOf(vals), ''], signature: true,
     });
     await saveBook(wb, `Diem_${slug(cls.code)}_${a.date}.xlsx`);
   });

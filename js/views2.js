@@ -374,7 +374,7 @@
 
     const rows = list.map((a) => {
       const sc = scoresOf(a, students.map((s) => s.id)), m = avg(sc);
-      return `<tr><td class="nowrap">${U.fmtDate(a.date)}</td><td class="name">${esc(a.title)}</td><td>${sc.length}/${students.length}</td>
+      return `<tr><td class="nowrap">${U.fmtDate(a.date)}</td><td class="name">${esc(a.title)}${a.parts && a.parts.length ? `<div class="small muted">${a.parts.map((p) => esc(p.name)).join(' · ')}</div>` : ''}</td><td>${sc.length}/${students.length}</td>
         <td>${m === null ? '<span class="muted">-</span>' : `<span class="score-badge ${scoreCls(m)}">${m}</span>`}</td>
         <td class="nowrap right"><a class="btn sm soft" href="#/assessments/${a.id}">${icon('edit', 15)} Nhập / xem điểm</a> <button class="icon-btn danger" data-del="${a.id}">${icon('trash')}</button></td></tr>`;
     }).join('');
@@ -398,17 +398,20 @@
     const create = (date) => {
       const ss = U.sessions(cls, '2000-01-01', U.today());
       const d0 = date || ss.pop() || U.today();
-      U.modal({
+      const cm = U.modal({
         title: 'Tạo bài đánh giá', okText: 'Tạo và nhập điểm',
         body: `<div class="form-grid"><div class="full"><label class="f">Tên bài đánh giá *</label><input class="input" id="t" placeholder="Ví dụ: Kiểm tra giữa kỳ, Test Unit 3" value="Kiểm tra"></div>
-          <div class="full"><label class="f">Ngày (buổi học) *</label><input class="input" type="date" id="d" value="${d0}"></div></div>`,
+          <div class="full"><label class="f">Ngày (buổi học) *</label><input class="input" type="date" id="d" value="${d0}"></div>
+          ${partsHtml({})}</div>`,
         onOk: async (w) => {
           const title = w.querySelector('#t').value.trim(), date = w.querySelector('#d').value;
           if (!title || !date) throw new Error('Nhập tên bài đánh giá và ngày.');
-          const id = await DB.save('assessments', null, { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), title, date, scores: {}, comments: {}, createdBy: App.me.name }, true);
+          const pr = readParts(w);
+          const id = await DB.save('assessments', null, { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), title, date, scores: {}, comments: {}, parts: pr.parts, autoAvg: pr.autoAvg, partScores: {}, createdBy: App.me.name }, true);
           App.go('assessments', { id });
         },
       });
+      bindParts(cm.el);
     };
     root.querySelector('#add').onclick = () => create();
     root.querySelector('#impm').onclick = () => root.querySelector('#mfile').click();
@@ -475,6 +478,42 @@
     if (params.new) create(params.date);
   };
 
+  /* ---- Thành phần (cột phụ) của bài đánh giá: Nghe, Nói, Đọc, Viết... ---- */
+  const PART_PRESET = ['Nghe', 'Nói', 'Đọc', 'Viết', 'Từ vựng', 'Ngữ pháp'];
+  const partId = (n, i) => U.norm(n).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'p' + i;
+  const partsHtml = (cur) => {
+    const names = (cur.parts || []).map((p) => p.name);
+    const all = [...PART_PRESET, ...names.filter((n) => !PART_PRESET.includes(n))];
+    return `<div class="full"><label class="f">Kiểu bài đánh giá</label>
+      <label class="ck"><input type="radio" name="pmode" value="single" ${names.length ? '' : 'checked'}> <span><b>Một điểm duy nhất</b> (bài chính)</span></label>
+      <label class="ck"><input type="radio" name="pmode" value="multi" ${names.length ? 'checked' : ''}> <span><b>Nhiều thành phần</b> (có các cột phụ như Nghe, Nói, Đọc, Viết…)</span></label></div>
+      <div class="full" id="pbox" style="${names.length ? '' : 'display:none'}">
+        <div class="rp-tests" id="plist">${all.map((n) => `<label class="ck"><input type="checkbox" data-pn="${esc(n)}" ${names.includes(n) ? 'checked' : ''}> ${esc(n)}</label>`).join('')}</div>
+        <div class="row" style="margin-top:8px"><input class="input" id="pnew" placeholder="Thêm cột khác, ví dụ: Phát âm" style="max-width:260px"><button type="button" class="btn sm soft" id="padd">${icon('plus', 14)} Thêm cột</button></div>
+        <label class="ck" style="margin-top:8px"><input type="checkbox" id="pauto" ${cur.autoAvg === false ? '' : 'checked'}> Điểm chung tự tính bằng trung bình các cột</label>
+        <div class="hint">Bỏ tick ô trên nếu muốn tự nhập điểm chung (bài chính) và dùng các cột phụ để tham khảo.</div></div>`;
+  };
+  const bindParts = (w) => {
+    const sync = () => { w.querySelector('#pbox').style.display = w.querySelector('[name=pmode]:checked').value === 'multi' ? '' : 'none'; };
+    w.querySelectorAll('[name=pmode]').forEach((r) => { r.onchange = sync; });
+    const add = () => {
+      const inp = w.querySelector('#pnew'), n = inp.value.trim();
+      if (!n) return;
+      const ex = [...w.querySelectorAll('[data-pn]')].find((x) => U.norm(x.dataset.pn) === U.norm(n));
+      if (ex) ex.checked = true;
+      else w.querySelector('#plist').insertAdjacentHTML('beforeend', `<label class="ck"><input type="checkbox" data-pn="${esc(n)}" checked> ${esc(n)}</label>`);
+      inp.value = '';
+    };
+    w.querySelector('#padd').onclick = add;
+    w.querySelector('#pnew').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+  };
+  const readParts = (w) => {
+    if (w.querySelector('[name=pmode]:checked').value !== 'multi') return { parts: [], autoAvg: true };
+    const names = [...w.querySelectorAll('[data-pn]:checked')].map((x) => x.dataset.pn);
+    if (!names.length) throw new Error('Hãy chọn ít nhất một cột thành phần (hoặc chọn "Một điểm duy nhất").');
+    return { parts: names.map((n, i) => ({ id: partId(n, i), name: n })), autoAvg: w.querySelector('#pauto').checked };
+  };
+
   async function assessEditor(root, id) {
     const a = await DB.get('assessments', id);
     if (!a) { root.innerHTML = `${head('Không tìm thấy')}<div class="card">${empty('star', 'Bài đánh giá không tồn tại', '<a href="#/assessments">Quay lại danh sách</a>')}</div>`; return; }
@@ -482,83 +521,131 @@
     if (!cls) { root.innerHTML = `<div class="card">${empty('star', 'Bạn không có quyền xem bài đánh giá này', '')}</div>`; return; }
     const all = await DB.q('students', [['classId', '==', cls.id]]);
     const students = U.sortVN(all.filter((s) => s.status !== 'inactive' || (a.scores && a.scores[s.id] != null)));
-    const scores = { ...(a.scores || {}) }, comments = { ...(a.comments || {}) };
+    let parts = (a.parts || []).map((p) => ({ ...p })), autoAvg = a.autoAvg !== false;
+    const scores = { ...(a.scores || {}) }, comments = { ...(a.comments || {}) }, pscores = JSON.parse(JSON.stringify(a.partScores || {}));
+    const meta = { title: a.title, date: a.date };
+    const multi = () => parts.length > 0;
+    const auto = () => multi() && autoAvg;
+    const overall = (sid) => { const v = parts.map((p) => pscores[sid] && pscores[sid][p.id]).filter((x) => x != null && x !== '' && !isNaN(x)).map(Number); return v.length ? avg(v) : null; };
+    const recalc = (sid) => { if (auto()) scores[sid] = overall(sid); };
+    students.forEach((s) => recalc(s.id));
 
-    root.innerHTML = `<div class="page-head"><div><a href="#/assessments?class=${cls.id}" class="small">${icon('back', 14)} Danh sách đánh giá</a><h1 style="margin-top:6px">${esc(a.title)}</h1><p>${esc(cls.name)} (${esc(cls.code)}) · ${U.fmtDate(a.date)}</p></div>
-        <div class="row"><button class="btn ghost" id="tpl">${icon('download')} Tải file mẫu</button><button class="btn ghost" id="imp">${icon('upload')} Nhập từ Excel</button><button class="btn ghost" id="exp">${icon('download')} Xuất Excel</button><input type="file" id="file" accept=".xlsx,.xls,.csv" class="hidden"></div></div>
-      <div class="card"><div class="card-h"><div class="row"><div><label class="f">Tên bài</label><input class="input" id="title" value="${esc(a.title)}" style="min-width:240px"></div><div><label class="f">Ngày</label><input class="input" type="date" id="date" value="${esc(a.date)}"></div></div>
+    const draw = () => {
+      root.innerHTML = `<div class="page-head"><div><a href="#/assessments?class=${cls.id}" class="small">${icon('back', 14)} Danh sách đánh giá</a><h1 style="margin-top:6px">${esc(meta.title)}</h1><p>${esc(cls.name)} (${esc(cls.code)}) · ${U.fmtDate(meta.date)}${multi() ? ' · ' + parts.map((p) => esc(p.name)).join(' · ') : ''}</p></div>
+        <div class="row"><button class="btn ghost" id="cfg">${icon('edit')} Thành phần điểm</button><button class="btn ghost" id="tpl">${icon('download')} Tải file mẫu</button><button class="btn ghost" id="imp">${icon('upload')} Nhập từ Excel</button><button class="btn ghost" id="exp">${icon('download')} Xuất Excel</button><input type="file" id="file" accept=".xlsx,.xls,.csv" class="hidden"></div></div>
+      <div class="card"><div class="card-h"><div class="row"><div><label class="f">Tên bài</label><input class="input" id="title" value="${esc(meta.title)}" style="min-width:240px"></div><div><label class="f">Ngày</label><input class="input" type="date" id="date" value="${esc(meta.date)}"></div></div>
         <div class="grow"></div><div class="right"><div class="small muted">Điểm trung bình lớp</div><b style="font-size:24px" id="avg">-</b></div></div>
-        <div class="table-wrap"><table class="t"><thead><tr><th>#</th><th>Học sinh</th><th>Điểm (0-10)</th><th style="width:48%">Nhận xét</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="t"><thead><tr><th>#</th><th>Học sinh</th>${parts.map((p) => `<th>${esc(p.name)}</th>`).join('')}<th>${auto() ? 'Điểm chung (tự tính)' : multi() ? 'Điểm chung' : 'Điểm (0-10)'}</th><th style="width:${multi() ? 30 : 48}%">Nhận xét</th></tr></thead><tbody>
         ${students.map((s, i) => `<tr><td class="muted">${i + 1}</td><td class="name">${esc(s.name)}<div class="small muted">${esc(s.code || '')}</div></td>
-          <td><input class="input score-in" type="number" min="0" max="10" step="0.05" inputmode="decimal" data-sid="${s.id}" value="${scores[s.id] != null ? esc(scores[s.id]) : ''}"></td>
+          ${parts.map((p) => `<td><input class="input score-in" type="number" min="0" max="10" step="0.05" inputmode="decimal" data-sid="${s.id}" data-pid="${p.id}" value="${pscores[s.id] && pscores[s.id][p.id] != null ? esc(pscores[s.id][p.id]) : ''}"></td>`).join('')}
+          <td>${auto() ? `<b data-ov="${s.id}">${scores[s.id] != null ? esc(scores[s.id]) : '-'}</b>` : `<input class="input score-in" type="number" min="0" max="10" step="0.05" inputmode="decimal" data-sid="${s.id}" value="${scores[s.id] != null ? esc(scores[s.id]) : ''}">`}</td>
           <td><input class="input" data-cm="${s.id}" maxlength="300" placeholder="Nhận xét..." value="${esc(comments[s.id] || '')}"></td></tr>`).join('')}
-        </tbody></table></div>
+        </tbody>${multi() ? `<tfoot><tr><td colspan="2">Trung bình lớp</td>${parts.map((p) => `<td data-pa="${p.id}">-</td>`).join('')}<td data-pa="ov">-</td><td></td></tr></tfoot>` : ''}</table></div>
         <div class="sticky-bar"><button class="btn ok lg" id="save">${icon('check')} Lưu điểm & nhận xét</button><button class="btn ghost danger-text" id="del" style="color:var(--err)">${icon('trash')} Xóa bài đánh giá</button></div></div>`;
-
+      refreshAvg();
+    };
     const refreshAvg = () => {
       const vals = Object.values(scores).filter((v) => v !== '' && v != null).map(Number).filter((v) => !isNaN(v));
       root.querySelector('#avg').textContent = vals.length ? avg(vals) : '-';
+      parts.forEach((p) => {
+        const v = students.map((s) => pscores[s.id] && pscores[s.id][p.id]).filter((x) => x != null && x !== '' && !isNaN(x)).map(Number);
+        const c = root.querySelector(`[data-pa="${p.id}"]`); if (c) c.textContent = v.length ? avg(v) : '-';
+      });
+      const oc = root.querySelector('[data-pa="ov"]'); if (oc) oc.textContent = vals.length ? avg(vals) : '-';
     };
-    refreshAvg();
+    const doSave = async () => {
+      if (root.querySelector('.score-in.bad')) throw new Error('Có điểm không hợp lệ (phải từ 0 đến 10).');
+      if (!meta.title || !meta.date) throw new Error('Nhập tên bài và ngày.');
+      const sc = {}, cm = {}, ps = {};
+      students.forEach((s) => {
+        if (scores[s.id] != null) sc[s.id] = scores[s.id];
+        if (comments[s.id]) cm[s.id] = comments[s.id];
+        const row = {}; parts.forEach((p) => { const v = pscores[s.id] && pscores[s.id][p.id]; if (v != null && v !== '' && !isNaN(v)) row[p.id] = Number(v); });
+        if (Object.keys(row).length) ps[s.id] = row;
+      });
+      await DB.save('assessments', id, { classId: a.classId, teacherId: a.teacherId || '', teacherIds: U.classTeachers(cls), title: meta.title, date: meta.date, scores: sc, comments: cm, parts, autoAvg, partScores: ps, createdBy: a.createdBy || App.me.name, updatedBy: App.me.name }, true);
+    };
+    draw();
+
     root.oninput = (e) => {
       const t = e.target;
+      if (t.id === 'title') meta.title = t.value.trim();
+      if (t.id === 'date') meta.date = t.value;
       if (t.dataset.sid) {
-        const raw = t.value.replace(',', '.');
-        const n = Number(raw);
+        const raw = t.value.replace(',', '.'), n = Number(raw);
         t.classList.toggle('bad', raw !== '' && (isNaN(n) || n < 0 || n > 10));
-        scores[t.dataset.sid] = raw === '' ? null : n;
+        const sid = t.dataset.sid;
+        if (t.dataset.pid) {
+          pscores[sid] = pscores[sid] || {};
+          pscores[sid][t.dataset.pid] = raw === '' || isNaN(n) ? null : n;
+          recalc(sid);
+          const ov = root.querySelector(`[data-ov="${sid}"]`); if (ov) ov.textContent = scores[sid] != null ? scores[sid] : '-';
+        } else scores[sid] = raw === '' ? null : n;
         refreshAvg();
       }
       if (t.dataset.cm) comments[t.dataset.cm] = t.value;
     };
-    root.querySelector('#save').onclick = async (e) => {
-      if (root.querySelector('.score-in.bad')) return U.toast('Có điểm không hợp lệ (phải từ 0 đến 10).', 'err');
-      const title = root.querySelector('#title').value.trim(), date = root.querySelector('#date').value;
-      if (!title || !date) return U.toast('Nhập tên bài và ngày.', 'err');
-      const btn = e.currentTarget; btn.disabled = true;
-      try {
-        const sc = {}, cm = {};
-        students.forEach((s) => { if (scores[s.id] != null) sc[s.id] = scores[s.id]; if (comments[s.id]) cm[s.id] = comments[s.id]; });
-        await DB.save('assessments', id, { classId: a.classId, teacherId: a.teacherId || '', teacherIds: U.classTeachers(cls), title, date, scores: sc, comments: cm, createdBy: a.createdBy || App.me.name, updatedBy: App.me.name }, true);
-        U.toast('Đã lưu điểm và nhận xét', 'ok');
-      } catch (er) { U.toast(er.message, 'err'); }
-      btn.disabled = false;
-    };
-    root.querySelector('#del').onclick = async () => {
-      if (!(await U.confirm(`Xóa bài đánh giá <b>${esc(a.title)}</b>?`, 'Xóa'))) return;
-      await DB.del('assessments', id);
-      U.toast('Đã xóa', 'ok');
-      App.go('assessments', { class: cls.id });
-    };
-    root.querySelector('#tpl').onclick = () => { try { X.scoreTemplate(cls, students, a.title, a.date); } catch (e) { U.toast(e.message, 'err'); } };
-    root.querySelector('#exp').onclick = () => {
-      try { X.exportScores(cls, { ...a, scores: Object.fromEntries(Object.entries(scores).filter(([, v]) => v != null)), comments }, students); } catch (e) { U.toast(e.message, 'err'); }
-    };
-    root.querySelector('#imp').onclick = () => root.querySelector('#file').click();
-    root.querySelector('#file').onchange = async (e) => {
+    root.onchange = async (e) => {
+      if (e.target.id !== 'file') return;
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
       try {
-        const rows = await X.parseScores(f);
+        const rows = await X.parseScores(f, parts);
         const byCode = Object.fromEntries(students.filter((s) => s.code).map((s) => [U.norm(s.code), s]));
         const byName = {};
         students.forEach((s) => { (byName[U.norm(s.name)] = byName[U.norm(s.name)] || []).push(s); });
         let ok = 0, bad = [], miss = [];
-        rows.forEach((r, i) => {
+        const okNum = (raw) => { const n = Number(raw); return raw !== '' && !isNaN(n) && n >= 0 && n <= 10 ? n : null; };
+        rows.forEach((r) => {
           if (!r.code && !r.name) return;
           const s = (r.code && byCode[U.norm(r.code)]) || ((byName[U.norm(r.name)] || []).length === 1 ? byName[U.norm(r.name)][0] : null);
           if (!s) return miss.push(r.name || r.code);
-          if (r.comment) { comments[s.id] = r.comment; root.querySelector(`[data-cm="${s.id}"]`).value = r.comment; }
-          if (r.score === '') return;
-          const n = Number(r.score);
-          if (isNaN(n) || n < 0 || n > 10) return bad.push(`${s.name} (${r.score})`);
-          scores[s.id] = n; ok++;
-          const inp = root.querySelector(`[data-sid="${s.id}"]`); inp.value = n; inp.classList.remove('bad');
+          if (r.comment) comments[s.id] = r.comment;
+          parts.forEach((p) => {
+            const raw = (r.parts && r.parts[p.id]) || '';
+            if (raw === '') return;
+            const n = okNum(raw);
+            if (n === null) return bad.push(`${s.name} - ${p.name} (${raw})`);
+            pscores[s.id] = pscores[s.id] || {}; pscores[s.id][p.id] = n; ok++;
+          });
+          recalc(s.id);
+          if (r.score !== '' && !auto()) { const n = okNum(r.score); if (n === null) bad.push(`${s.name} (${r.score})`); else { scores[s.id] = n; ok++; } }
         });
-        refreshAvg();
+        draw();
         const extra = (miss.length ? ` Không khớp: ${miss.slice(0, 3).join(', ')}${miss.length > 3 ? '…' : ''}.` : '') + (bad.length ? ` Điểm sai: ${bad.slice(0, 3).join(', ')}.` : '');
         U.toast(`Đã điền ${ok} điểm từ Excel. Bấm "Lưu" để lưu lại.${extra}`, bad.length || miss.length ? 'err' : 'ok');
       } catch (er) { U.toast(er.message, 'err'); }
+    };
+    root.onclick = async (e) => {
+      const t = e.target, hit = (sel) => t.closest(sel);
+      if (hit('#save')) {
+        const btn = hit('#save'); btn.disabled = true;
+        try { await doSave(); U.toast('Đã lưu điểm và nhận xét', 'ok'); } catch (er) { U.toast(er.message, 'err'); }
+        btn.disabled = false;
+      } else if (hit('#del')) {
+        if (!(await U.confirm(`Xóa bài đánh giá <b>${esc(a.title)}</b>?`, 'Xóa'))) return;
+        await DB.del('assessments', id);
+        U.toast('Đã xóa', 'ok');
+        App.go('assessments', { class: cls.id });
+      } else if (hit('#tpl')) {
+        try { X.scoreTemplate(cls, students, meta.title, meta.date, parts, autoAvg); } catch (er) { U.toast(er.message, 'err'); }
+      } else if (hit('#exp')) {
+        try { X.exportScores(cls, { ...a, title: meta.title, date: meta.date, parts, autoAvg, partScores: pscores, scores: Object.fromEntries(Object.entries(scores).filter(([, v]) => v != null)), comments }, students); } catch (er) { U.toast(er.message, 'err'); }
+      } else if (hit('#imp')) root.querySelector('#file').click();
+      else if (hit('#cfg')) {
+        const m = U.modal({
+          title: 'Thành phần điểm của bài này', okText: 'Áp dụng',
+          body: `<div class="form-grid">${partsHtml({ parts, autoAvg })}</div><div class="hint" style="margin-top:8px">Bỏ một cột thì điểm đã nhập ở cột đó sẽ mất khi lưu. Chuyển về "Một điểm duy nhất" thì giữ lại điểm chung hiện có.</div>`,
+          onOk: async (w) => {
+            const r = readParts(w);
+            parts = r.parts; autoAvg = r.autoAvg;
+            students.forEach((s) => { recalc(s.id); if (pscores[s.id]) Object.keys(pscores[s.id]).forEach((k) => { if (!parts.some((p) => p.id === k)) delete pscores[s.id][k]; }); });
+            draw();
+            U.toast('Đã áp dụng. Bấm "Lưu" để lưu thay đổi.', 'ok');
+          },
+        });
+        bindParts(m.el);
+      }
     };
   }
 

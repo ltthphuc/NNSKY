@@ -282,9 +282,9 @@ window.Views = window.Views || {};
     const cls = App.classById(id);
     if (!cls) { root.innerHTML = `${head('Không tìm thấy lớp')}<div class="card">${empty('classes', 'Lớp không tồn tại hoặc bạn không có quyền xem', '<a href="#/classes">Quay lại danh sách lớp</a>')}</div>`; return; }
     const admin = DB.isAdmin();
-    const tab = params.tab === 'attendance' ? 'attendance' : 'students';
+    const tab = params.tab === 'attendance' ? 'attendance' : params.tab === 'complete' ? 'complete' : 'students';
     const teachersText = [App.teacherName(cls.teacherId), cls.assistantId ? 'Trợ giảng: ' + App.teacherName(cls.assistantId) : ''].filter(Boolean).join(' · ');
-    const tabs = [['students', 'Học sinh', `#/classes/${id}`], ['attendance', 'Điểm danh học sinh & giáo viên', `#/classes/${id}?tab=attendance`], ['assess', 'Điểm kiểm tra', `#/assessments?class=${id}`], ['tuition', 'Học phí', `#/tuition?class=${id}`]];
+    const tabs = [['students', 'Học sinh', `#/classes/${id}`], ['attendance', 'Điểm danh học sinh & giáo viên', `#/classes/${id}?tab=attendance`], ['complete', 'Phiếu hoàn thành khóa học', `#/classes/${id}?tab=complete`], ['assess', 'Điểm kiểm tra', `#/assessments?class=${id}`], ['tuition', 'Học phí', `#/tuition?class=${id}`]];
     root.innerHTML = `<div class="page-head"><div><a href="#/classes" class="small">${icon('back', 14)} Danh sách lớp</a>
         <h1 style="margin-top:6px">${esc(cls.name)} <span class="badge blue" style="vertical-align:middle">${esc(cls.code)}</span></h1>
         <p>${esc(U.scheduleText(cls))} · ${esc(teachersText)}</p></div>
@@ -294,8 +294,101 @@ window.Views = window.Views || {};
     const ec = root.querySelector('#editcls');
     if (ec) ec.onclick = () => classModal(cls);
     const body = root.querySelector('#tabbody');
-    if (tab === 'attendance') { await Views.attendance(body, { class: id, date: params.date, month: params.month, embed: 1 }); return; }
+    if (tab === 'attendance') { await Views.attendance(body, { class: id, date: params.date, month: params.month, scope: params.scope, embed: 1 }); return; }
+    if (tab === 'complete') { await completePanel(body, cls); return; }
     await studentsPanel(body, cls);
+  }
+
+
+  /* Tab "Phiếu hoàn thành khóa học": chọn học sinh đã hoàn thành, in phiếu từng em và bảng tổng hợp cả lớp (điểm + nhận xét) */
+  async function completePanel(root, cls) {
+    const id = cls.id;
+    const [students, assess] = await Promise.all([DB.q('students', [['classId', '==', id]]), DB.q('assessments', [['classId', '==', id]])]);
+    const list = U.sortVN(students.filter((s) => s.status !== 'inactive'));
+    const tests = assess.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const KEY = 'sky_complete_opts_v1';
+    let o = { org: 'TTNN Sky', title: 'Giám đốc', signer: '', issue: 'today', scores: true, certCmt: false, sumCmt: true };
+    try { o = { ...o, ...JSON.parse(localStorage.getItem(KEY)) }; } catch (e) { /* bỏ qua */ }
+    const teachers = [App.teacherName(cls.teacherId), cls.assistantId ? 'Trợ giảng: ' + App.teacherName(cls.assistantId) : ''].filter(Boolean).join(' · ');
+    const today = U.today();
+    const scoreOf = (st, a) => (a.scores && a.scores[st.id] != null && a.scores[st.id] !== '' ? Number(a.scores[st.id]) : '');
+    const avgOf = (v) => { const n = v.filter((x) => typeof x === 'number'); return n.length ? Math.round((n.reduce((p, c) => p + c, 0) / n.length) * 100) / 100 : ''; };
+    const scoreColor = (v) => (typeof v !== 'number' ? undefined : v >= 8 ? 'FF0E7A3E' : v >= 6.5 ? 'FF1F6FEB' : v >= 5 ? 'FFB45309' : 'FFC62828');
+    const longDate = (d) => { const x = U.parse(d); return `Ngày ${x.getDate()} tháng ${x.getMonth() + 1} năm ${x.getFullYear()}`; };
+
+    root.innerHTML = `<div class="card"><div class="card-h"><h3>Thông tin phiếu hoàn thành</h3><span class="small muted">Dùng cho cả phiếu từng học sinh và bảng tổng hợp của lớp</span></div><div class="card-b"><div class="form-grid">
+        <div><label class="f">Tên khóa học</label><input class="input" id="cname" value="${esc(cls.name)}"></div>
+        <div><label class="f">Ngày cấp</label><select class="select" id="cissue"><option value="today" ${o.issue === 'today' ? 'selected' : ''}>Ghi ngày hôm nay</option><option value="blank" ${o.issue === 'blank' ? 'selected' : ''}>Để trống (viết tay)</option></select></div>
+        <div><label class="f">Từ ngày</label><input class="input" type="date" id="cfrom" value="${esc(cls.startDate || '')}"></div>
+        <div><label class="f">Đến ngày</label><input class="input" type="date" id="cto" value="${esc(cls.endDate && cls.endDate < today ? cls.endDate : today)}"></div>
+        <div><label class="f">Đơn vị ký</label><input class="input" id="corg" value="${esc(o.org)}"></div>
+        <div><label class="f">Chức danh</label><input class="input" id="ctitle" value="${esc(o.title)}"></div>
+        <div class="full"><label class="f">Tên người ký (không bắt buộc)</label><input class="input" id="csigner" value="${esc(o.signer)}"></div></div></div></div>
+      <div class="card mt"><div class="card-h"><h3>Bài kiểm tra hiển thị (điểm và nhận xét)</h3><div class="grow"></div><button class="btn sm ghost" id="alltests">Chọn / bỏ hết</button></div><div class="card-b">
+        ${tests.length ? `<div class="rp-tests">${tests.map((a) => `<label class="ck"><input type="checkbox" data-t="${a.id}" checked> ${esc(a.title)} <span class="muted small">(${U.fmtDate(a.date)})</span></label>`).join('')}</div>` : '<div class="muted">Lớp chưa có bài kiểm tra nào. Vào tab "Điểm kiểm tra" để tạo và nhập điểm.</div>'}
+        <div class="row" style="margin-top:12px;gap:18px"><label class="ck"><input type="checkbox" id="oscores" ${o.scores ? 'checked' : ''}> Hiện điểm trên phiếu từng học sinh</label>
+          <label class="ck"><input type="checkbox" id="ocert" ${o.certCmt ? 'checked' : ''}> Hiện nhận xét trên phiếu từng học sinh</label>
+          <label class="ck"><input type="checkbox" id="osum" ${o.sumCmt ? 'checked' : ''}> Hiện nhận xét trong bảng tổng hợp lớp</label></div></div></div>
+      <div class="card mt"><div class="card-h"><h3>Học sinh đã hoàn thành khóa học</h3><div class="grow"></div><span class="badge ok" id="cnt"></span></div>
+        <div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th class="chk"><input type="checkbox" id="pickall" checked></th><th>#</th><th>Họ và tên</th><th class="center">Số bài đã chấm</th><th class="center">Điểm TB</th></tr></thead><tbody>
+          ${list.map((s, i) => { const v = tests.map((a) => scoreOf(s, a)); return `<tr><td class="chk"><input type="checkbox" data-s="${s.id}" checked></td><td class="muted">${i + 1}</td><td class="name">${esc(s.name)}</td><td class="center">${v.filter((x) => x !== '').length}/${tests.length}</td><td class="center"><b>${esc(avgOf(v) === '' ? '–' : avgOf(v))}</b></td></tr>`; }).join('')}</tbody></table>` : empty('students', 'Lớp chưa có học sinh', 'Thêm học sinh ở tab "Học sinh".')}</div>
+        <div class="card-b" style="border-top:1px solid var(--line)"><div class="row">
+          <button class="btn" id="pcert">${icon('printer')} In phiếu hoàn thành (từng học sinh)</button>
+          <button class="btn" id="psum">${icon('printer')} In bảng tổng hợp lớp</button>
+          <button class="btn ghost" id="xcert">${icon('download')} Xuất Excel phiếu</button>
+          <button class="btn ghost" id="xsum">${icon('download')} Xuất Excel tổng hợp lớp</button></div>
+          <div class="hint" style="margin-top:8px">Bấm "In", cửa sổ in của trình duyệt mở ra: chọn máy in hoặc "Lưu thành PDF". Phiếu từng học sinh in khổ A4 dọc, bảng tổng hợp lớp in khổ A4 ngang.</div></div></div>`;
+
+    const q = (sel) => root.querySelector(sel);
+    const count = () => { const n = root.querySelectorAll('[data-s]:checked').length; q('#cnt').textContent = `Đã chọn ${n} / ${list.length} học sinh`; const pa = q('#pickall'); if (pa) pa.checked = n === list.length && n > 0; };
+    count();
+    root.onchange = (e) => {
+      const t = e.target;
+      if (t.id === 'pickall') { root.querySelectorAll('[data-s]').forEach((c) => { c.checked = t.checked; }); }
+      count();
+    };
+    const gather = () => {
+      const selTests = tests.filter((a) => q(`[data-t="${a.id}"]`).checked);
+      const rows = list.filter((s) => q(`[data-s="${s.id}"]`).checked).map((s) => {
+        const items = selTests.map((a) => ({ title: a.title, date: a.date, score: scoreOf(s, a), comment: (a.comments && a.comments[s.id]) || '' }));
+        return { student: s, tests: items, avg: avgOf(items.map((i) => i.score)) };
+      });
+      const opt = { org: q('#corg').value.trim() || App.settings.centerName, title: q('#ctitle').value.trim(), signer: q('#csigner').value.trim(), issue: q('#cissue').value, scores: q('#oscores').checked, certCmt: q('#ocert').checked, sumCmt: q('#osum').checked };
+      try { localStorage.setItem(KEY, JSON.stringify(opt)); } catch (e) { /* bỏ qua */ }
+      const from = q('#cfrom').value, to = q('#cto').value;
+      return { selTests, rows, opt, course: q('#cname').value.trim() || cls.name, from: from ? U.fmtDate(from) : '', to: to ? U.fmtDate(to) : '', issue: opt.issue === 'today' ? longDate(today) : '' };
+    };
+    root.onclick = (e) => {
+      const t = e.target;
+      if (t.closest('#alltests')) { const b = [...root.querySelectorAll('[data-t]')]; const on = b.some((x) => !x.checked); b.forEach((x) => { x.checked = on; }); return; }
+      const btn = t.closest('#pcert, #psum, #xcert, #xsum');
+      if (!btn) return;
+      const g = gather();
+      if (!g.rows.length) return U.toast('Hãy chọn ít nhất một học sinh đã hoàn thành.', 'err');
+      const center = App.settings.centerName;
+      if (btn.id === 'pcert') {
+        Report.printCertificates(g.rows, { center, course: g.course, code: cls.code, from: g.from, to: g.to, showScores: g.opt.scores, showComments: g.opt.certCmt, org: g.opt.org, title: g.opt.title, signer: g.opt.signer, issue: g.issue });
+      } else if (btn.id === 'psum') {
+        Report.printSummary({ center, cls, teachers, from: g.from, to: g.to, tests: g.selTests, rows: g.rows, classTotal: list.length, showComments: g.opt.sumCmt, org: g.opt.org, title: g.opt.title, signer: g.opt.signer, issue: g.issue });
+      } else if (btn.id === 'xcert') {
+        X.exportCertificates(g.rows.map((r) => ({ center, student: r.student, courseName: g.course, classCode: cls.code, from: g.from, to: g.to, tests: r.tests, showScores: g.opt.scores, avg: g.opt.scores ? r.avg : '', org: g.opt.org, signerTitle: g.opt.title, signerName: g.opt.signer, issueDate: g.issue })), `Giay_chung_nhan_${cls.code}.xlsx`);
+      } else {
+        const cols = [{ h: 'STT', w: 6, align: 'center' }, { h: 'Họ và tên', w: 28, bold: true }];
+        g.selTests.forEach((a) => {
+          cols.push({ h: `${a.title}\n${U.shortDate(a.date)}`, w: 12, align: 'center', fmt: '0.0#', bold: true, color: scoreColor });
+          if (g.opt.sumCmt) cols.push({ h: `Nhận xét: ${a.title}`, w: 36, wrap: true });
+        });
+        cols.push({ h: 'Điểm TB', w: 11, align: 'center', fmt: '0.0#', bold: true, color: scoreColor });
+        const rows = g.rows.map((r, i) => [i + 1, r.student.name, ...r.tests.flatMap((tt) => (g.opt.sumCmt ? [tt.score, tt.comment] : [tt.score])), r.avg]);
+        const avgCol = (idx) => avgOf(g.rows.map((r) => r.tests[idx].score));
+        const total = ['', 'Điểm trung bình lớp', ...g.selTests.flatMap((a, j) => (g.opt.sumCmt ? [avgCol(j), ''] : [avgCol(j)])), avgOf(g.rows.map((r) => r.avg))];
+        X.exportTable({
+          name: 'Hoàn thành khóa học', title: `DANH SÁCH HỌC SINH HOÀN THÀNH KHÓA HỌC ${cls.name.toUpperCase()}`, landscape: true,
+          info: [`Lớp: ${cls.name} (${cls.code}) · ${teachers}`, `Thời gian: từ ngày ${g.from || '………'} đến ngày ${g.to || '………'}`, `Tổng số học sinh hoàn thành: ${g.rows.length} / ${list.length} học sinh của lớp`],
+          cols, rows, total: g.selTests.length ? total : undefined, freezeCols: 2, signature: true,
+        }, `Tong_hop_hoan_thanh_${cls.code}.xlsx`);
+      }
+    };
   }
 
   async function studentsPanel(root, cls) {

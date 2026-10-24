@@ -276,5 +276,96 @@
     }, `Bao_cao_${single ? slug(list[0].name) : classes.length === 1 ? slug(classes[0].code) : 'hoc_sinh'}_${month}.xlsx`);
   }
 
-  window.Report = { open };
+  /* ===================== IN PHIẾU HOÀN THÀNH & BẢNG TỔNG HỢP LỚP (in trực tiếp / lưu PDF) ===================== */
+  const scoreCls = (v) => (typeof v !== 'number' ? '' : v >= 8 ? 'hi' : v >= 6.5 ? 'mid' : v >= 5 ? 'lo' : 'vlo');
+  const PRINT_CSS = `
+    @page { size: A4 portrait; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Times New Roman', Times, serif; color: #14213d; }
+    .cert { page-break-after: always; height: 276mm; padding: 4mm; }
+    .cert:last-child { page-break-after: auto; }
+    .cert .in { height: 100%; border: 3mm double #0e2748; padding: 14mm 14mm 10mm; text-align: center; display: flex; flex-direction: column; }
+    .org { font-size: 17pt; font-weight: bold; color: #1f6feb; letter-spacing: .5px; }
+    .star { color: #b8860b; margin: 2mm 0 6mm; font-size: 13pt; letter-spacing: 4px; }
+    h1 { margin: 0; font-size: 33pt; color: #0e2748; letter-spacing: 2px; }
+    h2 { margin: 2mm 0 8mm; font-size: 20pt; color: #1f6feb; }
+    .lead { font-style: italic; color: #51607a; font-size: 14pt; }
+    .name { font-size: 29pt; font-weight: bold; color: #b3261e; margin: 3mm 30mm 6mm; border-bottom: 1px solid #b8860b; padding-bottom: 2mm; }
+    .course, .time { font-size: 15pt; margin: 2mm 0; }
+    table.sc { width: 100%; border-collapse: collapse; margin: 6mm 0 0; font-size: 11.5pt; }
+    table.sc th { background: #0e2748; color: #fff; padding: 2mm 3mm; text-align: left; }
+    table.sc td { padding: 1.6mm 3mm; border-bottom: 1px solid #c9d5e8; text-align: left; vertical-align: top; }
+    table.sc td.s { text-align: center; font-weight: bold; width: 18mm; }
+    table.sc tr.avg td { font-weight: bold; background: #e3eefc; }
+    td.cm { font-size: 10pt; color: #44546a; font-style: italic; }
+    .grow { flex: 1; }
+    .sign { text-align: right; margin-top: 8mm; }
+    .sign .date { font-style: italic; font-size: 13pt; margin-bottom: 2mm; }
+    .sign .box { display: inline-block; width: 70mm; text-align: center; font-size: 14pt; }
+    .sign .gap { height: 24mm; }
+    .hi { color: #0e7a3e; } .mid { color: #1f6feb; } .lo { color: #b45309; } .vlo { color: #c62828; }
+  `;
+  const SUM_CSS = `
+    @page { size: A4 landscape; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #14213d; font-size: 10.5pt; }
+    .c { text-align: center; }
+    .org { font-weight: bold; color: #1f6feb; font-size: 11pt; }
+    h1 { margin: 2mm 0; font-size: 18pt; color: #0e2748; }
+    .meta { color: #51607a; font-size: 10pt; margin: 1mm 0; }
+    .total { display: inline-block; margin: 4mm 0; padding: 2mm 5mm; background: #e3f7ec; color: #0b6b35; border-radius: 3mm; font-weight: bold; font-size: 12pt; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #0e2748; color: #fff; padding: 2mm; font-size: 9.5pt; border: 1px solid #0e2748; }
+    th small { font-weight: normal; opacity: .85; }
+    td { border: 1px solid #c9d5e8; padding: 1.6mm 2mm; vertical-align: top; }
+    tbody tr:nth-child(even) td { background: #f5f8fd; }
+    tr { page-break-inside: avoid; }
+    td.n { text-align: center; width: 9mm; }
+    td.nm { font-weight: bold; white-space: nowrap; }
+    td.s { text-align: center; }
+    td.s b { font-size: 11.5pt; }
+    td.s small { display: block; color: #44546a; font-size: 8pt; font-style: italic; text-align: left; margin-top: .6mm; line-height: 1.25; }
+    tfoot td { background: #e3eefc !important; font-weight: bold; }
+    .hi { color: #0e7a3e; } .mid { color: #1f6feb; } .lo { color: #b45309; } .vlo { color: #c62828; }
+    .sign { display: flex; justify-content: space-around; margin-top: 8mm; text-align: center; page-break-inside: avoid; }
+    .sign div { width: 70mm; } .sign .gap { height: 20mm; }
+  `;
+  const wrap = (css, body) => `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>In</title><style>${css}</style></head><body>${body}</body></html>`;
+  const fmtScore = (v) => (typeof v === 'number' ? String(Math.round(v * 100) / 100).replace('.', ',') : '');
+
+  /* cards: [{ student, tests:[{title,date,score,comment}], avg }]; o: { center, course, code, from, to, showScores, showComments, org, title, signer, issue } */
+  function printCertificates(cards, o) {
+    const html = cards.map((c) => `<section class="cert"><div class="in">
+      <div class="org">${esc(o.center.toUpperCase())}</div><div class="star">✦ &nbsp;✦ &nbsp;✦</div>
+      <h1>GIẤY CHỨNG NHẬN</h1><h2>HOÀN THÀNH KHÓA HỌC</h2>
+      <div class="lead">Chứng nhận học sinh</div><div class="name">${esc(c.student.name.toUpperCase())}</div>
+      <p class="course">Đã hoàn thành khóa học: <b>${esc(o.course)}</b>${o.code ? ` (${esc(o.code)})` : ''}</p>
+      <p class="time">Thời gian: từ ngày ${esc(o.from || '………………')} đến ngày ${esc(o.to || '………………')}</p>
+      ${o.showScores && c.tests.length ? `<table class="sc"><thead><tr><th>Bài kiểm tra</th><th style="text-align:center">Điểm</th>${o.showComments ? '<th>Nhận xét</th>' : ''}</tr></thead><tbody>
+        ${c.tests.map((t) => `<tr><td>${esc(t.title)} (${esc(U.shortDate(t.date))})</td><td class="s ${scoreCls(t.score)}">${esc(fmtScore(t.score))}</td>${o.showComments ? `<td class="cm">${esc(t.comment)}</td>` : ''}</tr>`).join('')}
+        ${c.avg !== '' ? `<tr class="avg"><td>Điểm trung bình</td><td class="s">${esc(fmtScore(c.avg))}</td>${o.showComments ? '<td></td>' : ''}</tr>` : ''}</tbody></table>` : ''}
+      <div class="grow"></div>
+      <div class="sign"><div class="date">${esc(o.issue || 'Ngày ……… tháng ……… năm ………')}</div>
+        <div class="box"><b>${esc(o.org)}</b><br><b>${esc(o.title)}</b><br><i style="font-size:10pt">(ký tên, đóng dấu)</i><div class="gap"></div><b>${esc(o.signer || '')}</b></div></div>
+    </div></section>`).join('');
+    U.printHTML(wrap(PRINT_CSS, html));
+  }
+
+  /* d: { center, cls, teachers, from, to, tests, rows:[{student,tests,avg}], classTotal, showComments, org, title, signer, issue } */
+  function printSummary(d) {
+    const avgOf2 = (arr) => { const v = arr.filter((x) => typeof x === 'number'); return v.length ? Math.round((v.reduce((p, c) => p + c, 0) / v.length) * 100) / 100 : ''; };
+    const head = d.tests.map((a) => `<th>${esc(a.title)}<br><small>${esc(U.shortDate(a.date))}</small></th>`).join('');
+    const body = d.rows.map((r, i) => `<tr><td class="n">${i + 1}</td><td class="nm">${esc(r.student.name)}</td>${r.tests.map((t) => `<td class="s"><b class="${scoreCls(t.score)}">${esc(fmtScore(t.score)) || '–'}</b>${d.showComments && t.comment ? `<small>${esc(t.comment)}</small>` : ''}</td>`).join('')}<td class="s"><b class="${scoreCls(r.avg)}">${esc(fmtScore(r.avg)) || '–'}</b></td></tr>`).join('');
+    const foot = `<tr><td colspan="2" style="text-align:right">Điểm trung bình lớp</td>${d.tests.map((a, j) => `<td class="s">${esc(fmtScore(avgOf2(d.rows.map((r) => r.tests[j].score))))}</td>`).join('')}<td class="s">${esc(fmtScore(avgOf2(d.rows.map((r) => r.avg))))}</td></tr>`;
+    const html = `<div class="c"><div class="org">${esc(d.center.toUpperCase())}</div><h1>DANH SÁCH HỌC SINH HOÀN THÀNH KHÓA HỌC</h1>
+      <div class="meta"><b>${esc(d.cls.name)}</b> (${esc(d.cls.code)}) · ${esc(d.teachers)}</div>
+      <div class="meta">Thời gian khóa học: từ ngày ${esc(d.from || '………………')} đến ngày ${esc(d.to || '………………')}</div>
+      <div class="total">Tổng số học sinh hoàn thành: ${d.rows.length}${d.classTotal ? ` / ${d.classTotal} học sinh của lớp` : ''}</div></div>
+      <table><thead><tr><th>STT</th><th>Họ và tên</th>${head}<th>Điểm TB</th></tr></thead><tbody>${body}</tbody>${d.tests.length ? `<tfoot>${foot}</tfoot>` : ''}</table>
+      <div class="sign"><div><i>${esc(d.issue || 'Ngày ……… tháng ……… năm ………')}</i><br><b>Giáo viên phụ trách</b><br><i style="font-size:9pt">(ký, ghi rõ họ tên)</i><div class="gap"></div></div>
+        <div><i>&nbsp;</i><br><b>${esc(d.org)} - ${esc(d.title)}</b><br><i style="font-size:9pt">(ký tên, đóng dấu)</i><div class="gap"></div><b>${esc(d.signer || '')}</b></div></div>`;
+    U.printHTML(wrap(SUM_CSS, html));
+  }
+
+  window.Report = { open, printCertificates, printSummary };
 })();

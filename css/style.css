@@ -476,3 +476,10 @@ table.t { width: 100%; border-collapse: collapse; }
 .qchip.future { opacity: .45; cursor: not-allowed; }
 .qchip .qc i { position: absolute; right: -7px; top: -8px; background: var(--warn); color: #fff; border-radius: 99px; font-size: 10px; padding: 0 5px; font-style: normal; }
 .qchip .qc em { position: absolute; left: -4px; top: -4px; width: 9px; height: 9px; border-radius: 50%; background: var(--sky); border: 2px solid #fff; }
+
+/* ===== Điểm danh: nhóm ngày theo tháng ===== */
+.strip-groups { margin-bottom: 16px; }
+.chip-month { margin-bottom: 12px; }
+.cm-t { font-weight: 700; margin: 0 0 8px 2px; color: var(--navy-2); }
+.cm-t span { font-weight: 500; color: var(--muted); font-size: 13px; }
+.chip-month .strip { margin-bottom: 0; }

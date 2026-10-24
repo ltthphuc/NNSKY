@@ -552,10 +552,11 @@
       if (pair.some((c) => c.showScores && c.tests.length > MAXT)) truncated = true;
       const top = r;
       // chiều cao các dòng, dùng chung cho hai giấy trong cùng một tờ
-      const hs = [14, 16, 13, 26, 15, 14, 28, 16, 16, 16, 16, 8];
-      if (T) { hs.push(20); for (let k = 0; k < T; k++) hs.push(18); hs.push(18, 8); }
-      hs.push(15, 15, 15, 13, 36, 16);
-      const used = hs.reduce((a, b) => a + b, 0);
+      let hs = [20, 20, 16, 32, 18, 18, 34, 22, 20, 22, 20, 10];
+      if (T) { hs.push(22); for (let k = 0; k < T; k++) hs.push(20); hs.push(20, 10); }
+      hs.push(17, 17, 17, 15, 44, 18);
+      let used = hs.reduce((a, b) => a + b, 0);
+      if (used > F) { const k = F / used; hs = hs.map((h) => Math.floor(h * k)); used = hs.reduce((a, b) => a + b, 0); }
       hs.push(Math.max(2, F - used));
       hs.forEach((h, k) => { ws.getRow(top + k).height = h; });
       const last = top + hs.length - 1;
@@ -567,49 +568,49 @@
         const fromT = c.from || '…………………', toT = c.to || '…………………';
         const courseEn = c.courseNameEn || U.enClass(c.courseName);
         next();
-        nl(c.center.toUpperCase(), { name: SERIF, bold: true, size: 12, color: { argb: BLUE } });
-        nl(c.centerEn || U.centerEn(), { name: SERIF, italic: true, size: 9.5, color: { argb: BLUE } });
-        nl('GIẤY CHỨNG NHẬN', { name: SERIF, bold: true, size: 20, color: { argb: NAVY } });
-        nl('HOÀN THÀNH KHÓA HỌC  ·  CERTIFICATE OF COURSE COMPLETION', { name: SERIF, bold: true, size: 8.5, color: { argb: BLUE } });
-        nl('Chứng nhận học sinh / This is to certify that', { name: SERIF, italic: true, size: 9.5, color: { argb: GRAYTXT } });
+        nl(c.center.toUpperCase(), { name: SERIF, bold: true, size: 14, color: { argb: BLUE } });
+        nl(c.centerEn || U.centerEn(), { name: SERIF, italic: true, size: 11, color: { argb: BLUE } });
+        nl('GIẤY CHỨNG NHẬN', { name: SERIF, bold: true, size: 24, color: { argb: NAVY } });
+        nl('HOÀN THÀNH KHÓA HỌC  ·  CERTIFICATE OF COURSE COMPLETION', { name: SERIF, bold: true, size: 10, color: { argb: BLUE } });
+        nl('Chứng nhận học sinh / This is to certify that', { name: SERIF, italic: true, size: 11, color: { argb: GRAYTXT } });
         const nr = next();
-        span(nr, c0, c1, c.student.name.toUpperCase(), { name: SERIF, bold: true, size: 16, color: { argb: 'FFB3261E' } });
+        span(nr, c0, c1, c.student.name.toUpperCase(), { name: SERIF, bold: true, size: 20, color: { argb: 'FFB3261E' } });
         for (let i = c0 + 1; i <= c1 - 1; i++) ws.getCell(nr, i).border = { bottom: { style: 'thin', color: { argb: GOLD } } };
-        nl(`Đã hoàn thành khóa học: ${c.courseName}${c.classCode ? ' (' + c.classCode + ')' : ''}`, { name: SERIF, size: 10, color: ink });
-        nl(`has successfully completed the course: ${courseEn}`, { name: SERIF, italic: true, size: 9.5, color: ink });
-        nl(`Thời gian: từ ngày ${fromT} đến ngày ${toT}`, { name: SERIF, size: 10, color: ink });
-        nl(`Duration: from ${fromT} to ${toT}`, { name: SERIF, italic: true, size: 9.5, color: ink });
+        nl(`Đã hoàn thành khóa học: ${c.courseName}${c.classCode ? ' (' + c.classCode + ')' : ''}`, { name: SERIF, size: 12, color: ink });
+        nl(`has successfully completed the course: ${courseEn}`, { name: SERIF, italic: true, size: 11, color: ink });
+        nl(`Thời gian: từ ngày ${fromT} đến ngày ${toT}`, { name: SERIF, size: 12, color: ink });
+        nl(`Duration: from ${fromT} to ${toT}`, { name: SERIF, italic: true, size: 11, color: ink });
         next();
         if (T) {
           const hr = next();
-          span(hr, c0, c0 + 3, 'Bài kiểm tra / Test', { name: SERIF, bold: true, size: 9, color: { argb: 'FFFFFFFF' } }, 'left');
-          span(hr, c0 + 4, c1, 'Điểm / Score', { name: SERIF, bold: true, size: 9, color: { argb: 'FFFFFFFF' } });
+          span(hr, c0, c0 + 3, 'Bài kiểm tra / Test', { name: SERIF, bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } }, 'left');
+          span(hr, c0 + 4, c1, 'Điểm / Score', { name: SERIF, bold: true, size: 10.5, color: { argb: 'FFFFFFFF' } });
           for (let i = c0; i <= c1; i++) { ws.getCell(hr, i).fill = fillBg(NAVY); ws.getCell(hr, i).border = thinB; }
           const tests = c.showScores ? c.tests.slice(0, T) : [];
           for (let k = 0; k < T; k++) {
             const row = next(), t = tests[k];
-            span(row, c0, c0 + 3, t ? `${t.title} (${U.shortDate(t.date)})` : '', { name: SERIF, size: 10, color: ink }, 'left');
+            span(row, c0, c0 + 3, t ? `${t.title} (${U.shortDate(t.date)})` : '', { name: SERIF, size: 12, color: ink }, 'left');
             const sc = t && typeof t.score === 'number' ? t.score : null;
-            span(row, c0 + 4, c1, sc, { name: SERIF, bold: true, size: 10.5, color: { argb: scoreCol(sc) } });
+            span(row, c0 + 4, c1, sc, { name: SERIF, bold: true, size: 12, color: { argb: scoreCol(sc) } });
             ws.getCell(row, c0 + 4).numFmt = '0.0#';
             for (let i = c0; i <= c1; i++) ws.getCell(row, i).border = thinB;
           }
           const ar = next();
-          span(ar, c0, c0 + 3, 'Điểm trung bình / Average score', { name: SERIF, bold: true, size: 10, color: { argb: NAVY } }, 'left');
+          span(ar, c0, c0 + 3, 'Điểm trung bình / Average score', { name: SERIF, bold: true, size: 11.5, color: { argb: NAVY } }, 'left');
           const av = c.showScores && c.avg !== '' && c.avg !== undefined && c.avg !== null ? c.avg : null;
-          span(ar, c0 + 4, c1, av, { name: SERIF, bold: true, size: 11, color: { argb: scoreCol(av) } });
+          span(ar, c0 + 4, c1, av, { name: SERIF, bold: true, size: 13, color: { argb: scoreCol(av) } });
           ws.getCell(ar, c0 + 4).numFmt = '0.0#';
           for (let i = c0; i <= c1; i++) { ws.getCell(ar, i).fill = fillBg(TOTAL); ws.getCell(ar, i).border = thinB; }
           next();
         }
         // khối chữ ký nằm bên phải của giấy
         const sg = (text, font) => span(next(), c0 + 2, c1, text, font);
-        sg(c.issueDate || U.ISSUE_BLANK, { name: SERIF, italic: true, size: 9.5, color: ink });
-        sg(c.org, { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
-        sg(`${c.signerTitle} / ${c.signerTitleEn || U.enTitle(c.signerTitle)}`, { name: SERIF, bold: true, size: 10, color: { argb: NAVY } });
-        sg('(ký tên, đóng dấu) / (Signature & seal)', { name: SERIF, italic: true, size: 8.5, color: { argb: GRAYTXT } });
+        sg(c.issueDate || U.ISSUE_BLANK, { name: SERIF, italic: true, size: 11, color: ink });
+        sg(c.org, { name: SERIF, bold: true, size: 12, color: { argb: NAVY } });
+        sg(`${c.signerTitle} / ${c.signerTitleEn || U.enTitle(c.signerTitle)}`, { name: SERIF, bold: true, size: 11.5, color: { argb: NAVY } });
+        sg('(ký tên, đóng dấu) / (Signature & seal)', { name: SERIF, italic: true, size: 10, color: { argb: GRAYTXT } });
         next();
-        sg(c.signerName || '', { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } });
+        sg(c.signerName || '', { name: SERIF, bold: true, size: 12, color: { argb: NAVY } });
         // viền kép quanh khung
         for (let rr = top; rr <= last; rr++) {
           for (let col = c0; col <= c1; col++) {

@@ -354,7 +354,7 @@
   });
 
   /* ===== Điểm danh tháng ===== */
-  X.exportAttendance = safe(async (cls, month, students, dates, docsByDate) => {
+  X.exportAttendance = safe(async (cls, month, students, dates, docsByDate, opt = {}) => {
     const wb = newBook();
     const mark = (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E');
     const rows = students.map((s, i) => {
@@ -368,14 +368,14 @@
       return [i + 1, s.code || '', s.name, ...cells, p, a];
     });
     addSheet(wb, {
-      name: 'Điểm danh', title: `BẢNG ĐIỂM DANH ${U.monthLabel(month).toUpperCase()}`,
+      name: 'Điểm danh', title: `BẢNG ĐIỂM DANH ${opt.label || U.monthLabel(month).toUpperCase()}`,
       info: [`Lớp: ${cls.name} (${cls.code}) · ${U.scheduleText(cls)}`, `Giáo viên: ${App.teacherName(cls.teacherId)}${cls.assistantId ? ' · Trợ giảng: ' + App.teacherName(cls.assistantId) : ''}`],
       cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 20 }, { h: 'Họ và tên', w: 28, bold: true },
         ...dates.map((d) => ({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 8, align: 'center', color: mark, bold: true })),
         { h: 'Có mặt', w: 9, align: 'center', color: () => 'FF0E7A3E', bold: true }, { h: 'Vắng', w: 9, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : 'FF8A97AD'), bold: true }],
       rows, freezeCols: 3, notes: ['Ghi chú: ✓ = có mặt, V = vắng, ô trống = chưa điểm danh. File này dùng được làm mẫu để nhập lại điểm danh (✓ hoặc x = có mặt, V = vắng).'], signature: true,
     });
-    await saveBook(wb, `Diem_danh_${slug(cls.code)}_${month}.xlsx`);
+    await saveBook(wb, `Diem_danh_${slug(cls.code)}_${opt.file || month}.xlsx`);
   });
 
   /* ===== Lương giáo viên ===== */

@@ -119,7 +119,7 @@
     const issToggle = () => { issDate.style.display = issSel.value === 'custom' ? '' : 'none'; };
     issSel.onchange = issToggle; issToggle();
     m.el.querySelectorAll('[name=rmode]').forEach((r) => { r.onchange = setMode; });
-    U.periodBind(m.el.querySelector('#rperiod .period'));
+    U.periodBind(m.el.querySelector('#rperiod .period'), candidate.map((id) => App.classById(id)).filter(Boolean));
     setMode();
     m.el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-all]');

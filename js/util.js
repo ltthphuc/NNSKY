@@ -185,7 +185,7 @@
     const kind = o.kind || 'month', sem = o.sem || (mo >= 2 && mo <= 7 ? 'HK2' : 'HK1');
     const opt = (v, t, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${t}</option>`;
     return `<div class="period"><label class="f">Kỳ báo cáo</label>
-      <select class="select" data-pk>${opt('month', 'Theo tháng', kind)}${opt('semester', 'Theo học kỳ', kind)}${opt('range', 'Từ ngày … đến ngày …', kind)}${opt('all', 'Tất cả các buổi đã dạy (từ khi mở lớp)', kind)}</select>
+      <select class="select" data-pk>${opt('month', 'Theo tháng', kind)}${opt('semester', 'Theo học kỳ', kind)}${opt('range', 'Từ ngày … đến ngày …', kind)}${opt('all', 'Các buổi đã học của lớp (ngày mở lớp đến ngày kết thúc)', kind)}</select>
       <div class="row" style="margin-top:8px;flex-wrap:wrap">
         <input class="input" type="month" data-pm value="${o.month || today.slice(0, 7)}" style="width:auto">
         <select class="select" data-ps style="width:auto">${Object.keys(SEM_NAME).map((k) => opt(k, SEM_NAME[k], sem)).join('')}</select>
@@ -194,12 +194,19 @@
         <label class="small muted" data-pr>đến ngày <input class="input" type="date" data-pt value="${o.to || today}" style="width:auto"></label>
       </div></div>`;
   };
-  U.periodBind = (wrap) => {
+  /* Khoảng ngày của các lớp: từ ngày khai giảng đến ngày kết thúc (chưa kết thúc thì đến hôm nay) */
+  U.classSpan = (classes) => {
+    const today = U.today(), starts = classes.map((c) => c.startDate).filter(Boolean).sort();
+    const ends = classes.map((c) => c.endDate || today).sort();
+    return { from: starts[0] || U.addMonth(today.slice(0, 7), -11) + '-01', to: ends[ends.length - 1] || today };
+  };
+  U.periodBind = (wrap, classes = []) => {
     const sync = () => {
       const k = wrap.querySelector('[data-pk]').value;
+      if (k === 'all' && classes.length) { const sp = U.classSpan(classes); wrap.querySelector('[data-pf]').value = sp.from; wrap.querySelector('[data-pt]').value = sp.to; }
       wrap.querySelector('[data-pm]').style.display = k === 'month' ? '' : 'none';
       wrap.querySelector('[data-ps]').style.display = wrap.querySelector('[data-py]').style.display = k === 'semester' ? '' : 'none';
-      wrap.querySelectorAll('[data-pr]').forEach((x) => { x.style.display = k === 'range' ? '' : 'none'; });
+      wrap.querySelectorAll('[data-pr]').forEach((x) => { x.style.display = k === 'range' || k === 'all' ? '' : 'none'; });
     };
     wrap.querySelector('[data-pk]').onchange = sync; sync();
   };
@@ -216,9 +223,9 @@
       if (!from || !to || from > to) throw new Error('Khoảng ngày không hợp lệ (ngày bắt đầu phải trước ngày kết thúc).');
       return { kind, from, to, label: `Từ ngày ${U.fmtDate(from)} đến ngày ${U.fmtDate(to)}`, file: `${from}_${to}` };
     }
-    const starts = classes.map((c) => c.startDate).filter(Boolean).sort();
-    const from = starts[0] || U.addMonth(today.slice(0, 7), -11) + '-01';
-    return { kind, from, to: today, label: `Tất cả các buổi đã dạy (từ ${U.fmtDate(from)} đến ${U.fmtDate(today)})`, file: 'tat_ca_buoi_da_day' };
+    const sp = U.classSpan(classes), from = g('[data-pf]').value || sp.from, to = g('[data-pt]').value || sp.to;
+    if (from > to) throw new Error('Khoảng ngày không hợp lệ (ngày bắt đầu phải trước ngày kết thúc).');
+    return { kind, from, to, label: `Các buổi đã dạy từ ngày ${U.fmtDate(from)} đến ngày ${U.fmtDate(to)}`, file: 'cac_buoi_da_day' };
   };
   /* Học phí cộng dồn nhiều tháng trong kỳ [from, to]: mỗi tháng tính theo các buổi nằm trong kỳ, "đã đóng" khi mọi tháng đều đã đóng */
   U.tuitionPeriod = ({ classes, students, attendance, payments, settings, from, to }) => {

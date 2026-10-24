@@ -383,7 +383,7 @@ table.sg td{vertical-align:top;font-size:12pt}
         <div id="x_period" style="margin-top:12px">${U.periodHtml({ kind: 'semester' })}</div>
         <div class="row mt"><button class="btn" id="x_go">${icon('download')} Tải bộ hồ sơ Excel</button></div></div></div>`;
 
-    root.querySelectorAll('.period').forEach((p) => U.periodBind(p));
+    root.querySelectorAll('.period').forEach((p) => U.periodBind(p, classes));
     const q = (s) => root.querySelector(s);
     const picked = () => classes.filter((c) => root.querySelector(`[data-cp="${c.id}"]`).checked);
     const cnt = () => { q('#cp_n').textContent = `Đã chọn ${picked().length} / ${classes.length} lớp`; };

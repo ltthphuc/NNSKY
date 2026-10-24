@@ -308,7 +308,14 @@
       if (t.closest('#mkass')) { if (await guard()) App.go('assessments', { class: cls.id, new: 1, date: sel }); return; }
       if (t.closest('#imp')) { if (await guard()) root.querySelector('#afile').click(); return; }
       if (t.closest('#exp')) {
-        try { const byDate = Object.fromEntries(docs.map((d) => [d.date, d])); X.exportAttendance(cls, month, students, monthSessions(), byDate); } catch (er) { U.toast(er.message, 'err'); }
+        try {
+          const byDate = Object.fromEntries(docs.map((d) => [d.date, d]));
+          // từ khi mở lớp: mọi buổi đã có điểm danh; theo tuần / tháng: các buổi trong khoảng đang xem
+          const dates = scope === 'all' ? Object.keys(byDate).filter((d) => Object.keys(byDate[d].records || {}).length).sort() : scope === 'week' ? U.sessions(cls, ...weekDates()) : monthSessions();
+          if (!dates.length) throw new Error('Chưa có buổi nào được điểm danh để xuất.');
+          const label = scope === 'all' ? `TỪ ${U.fmtDate(dates[0])} ĐẾN ${U.fmtDate(dates[dates.length - 1])}` : scope === 'week' ? `TUẦN ${U.shortDate(weekDates()[0])} - ${U.shortDate(weekDates()[1])}` : U.monthLabel(month).toUpperCase();
+          X.exportAttendance(cls, month, students, dates, byDate, { label, file: scope === 'all' ? 'tu_khi_mo_lop' : scope === 'week' ? weekDates()[0] : month });
+        } catch (er) { U.toast(er.message, 'err'); }
         return;
       }
       if (t.closest('#save')) {
@@ -670,7 +677,7 @@
           await X.exportTuition(rows, per.month || per.from.slice(0, 7), App.settings, { label: per.label, file: `Hoc_phi_${per.file}.xlsx`, showName: w.querySelector('#xn').checked, showCode: w.querySelector('#xc').checked });
         },
       });
-      U.periodBind(m.el.querySelector('.period'));
+      U.periodBind(m.el.querySelector('.period'), cl);
     };
     root.onchange = async (e) => {
       if (e.target.id === 'cls') { st.classId = e.target.value; render(); return; }

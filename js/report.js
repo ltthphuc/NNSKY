@@ -344,7 +344,7 @@
     td .en { font-weight: normal; }
     table.sc th:nth-child(2), table.sc td.s { width: 30mm; }
   `;
-  const issuePair = (o) => `<div class="date">${esc(o.issue || U.ISSUE_BLANK)}<br><span class="en" style="font-size:11pt">${esc(o.issueEn || U.ISSUE_BLANK_EN)}</span></div>`;
+  const issuePair = (o) => `<div class="date">${esc(o.issue || U.ISSUE_BLANK)}</div>`; // ngày ký chỉ ghi tiếng Việt
 
   /*
    * Phiếu hoàn thành SONG NGỮ Anh - Việt (mỗi học sinh một tờ A4 dọc)
@@ -389,7 +389,7 @@
       <div class="meta">Thời gian khóa học / Course duration: từ ngày ${esc(from)} đến ngày ${esc(to)} (from ${esc(from)} to ${esc(to)})</div>
       <div class="total">Tổng số học sinh hoàn thành / Total students completed: ${d.rows.length}${d.classTotal ? ` / ${d.classTotal}` : ''}</div></div>
       <table><thead><tr><th>STT<br><small>No.</small></th><th>Họ và tên<br><small>Full name</small></th>${head}<th>Điểm TB<br><small>Average</small></th></tr></thead><tbody>${body}</tbody>${d.tests.length ? `<tfoot>${foot}</tfoot>` : ''}</table>
-      <div class="sign"><div><i>${esc(d.issue || U.ISSUE_BLANK)}<br>${esc(d.issueEn || U.ISSUE_BLANK_EN)}</i><br><b>Giáo viên phụ trách / Teacher in charge</b><br><i style="font-size:9pt">(ký, ghi rõ họ tên) / (Signature &amp; full name)</i><div class="gap"></div></div>
+      <div class="sign"><div><i>${esc(d.issue || U.ISSUE_BLANK)}</i><br><b>Giáo viên phụ trách / Teacher in charge</b><br><i style="font-size:9pt">(ký, ghi rõ họ tên) / (Signature &amp; full name)</i><div class="gap"></div></div>
         <div><i>&nbsp;</i><br><b>${esc(d.org)} - ${esc(d.title)} / ${esc(d.titleEn || U.enTitle(d.title))}</b><br><i style="font-size:9pt">(ký tên, đóng dấu) / (Signature &amp; seal)</i><div class="gap"></div><b>${esc(d.signer || '')}</b></div></div>`;
   }
   const printSummary = (d) => U.printHTML(wrap(SUM_CSS, summaryHtml(d)));

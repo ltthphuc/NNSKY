@@ -595,7 +595,7 @@
         blank(3);
       }
       // chữ ký (bên phải)
-      line(`${c.issueDate || U.ISSUE_BLANK}  /  ${c.issueDateEn || U.ISSUE_BLANK_EN}`, { name: SERIF, italic: true, size: 9.5, color: ink }, 15, 'right', 1);
+      line(c.issueDate || U.ISSUE_BLANK, { name: SERIF, italic: true, size: 9.5, color: ink }, 15, 'right', 1);
       line(c.org, { name: SERIF, bold: true, size: 10.5, color: { argb: NAVY } }, 14, 'centerContinuous', 5);
       line(`${c.signerTitle} / ${c.signerTitleEn || U.enTitle(c.signerTitle)}`, { name: SERIF, bold: true, size: 10, color: { argb: NAVY } }, 14, 'centerContinuous', 5);
       line('(ký tên, đóng dấu) / (Signature & seal)', { name: SERIF, italic: true, size: 8.5, color: { argb: GRAYTXT } }, 12, 'centerContinuous', 5);

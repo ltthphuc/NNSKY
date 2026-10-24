@@ -565,21 +565,37 @@
   /* ===================================================================
    *  HỌC PHÍ
    * =================================================================== */
-  const receiptHTML = (rows, month, settings) => {
-    const one = (r) => `<div class="rc"><h2>${esc(settings.centerName)}</h2><h3>PHIẾU THU HỌC PHÍ - ${U.monthLabel(month).toUpperCase()}</h3>
-      <table><tr><td>Học sinh</td><td><b>${esc(r.student.name)}</b></td></tr><tr><td>Lớp</td><td>${esc(r.cls.name)} (${esc(r.cls.code)})</td></tr>
-      <tr><td>Số buổi có mặt / vắng</td><td>${r.present} / ${r.absent}</td></tr><tr><td>Học phí tháng</td><td>${money(r.base)}</td></tr>
-      <tr><td>Trừ do vắng</td><td>${r.deduct ? '- ' + money(r.deduct) : '0 đ'}</td></tr>
-      <tr class="tt"><td>SỐ TIỀN PHẢI ĐÓNG</td><td>${money(r.total)}</td></tr></table>
-      <p class="sm">${esc(U.feeRuleText(r.cls, settings))}</p>
-      <div class="sg"><div>Phụ huynh<br><i>(ký, ghi rõ họ tên)</i></div><div>Người thu tiền<br><i>(ký, ghi rõ họ tên)</i></div></div></div>`;
-    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><style>
-      body{font-family:Arial,sans-serif;color:#111;margin:0}.rc{width:640px;margin:0 auto;padding:36px 30px;page-break-after:always;border-bottom:1px dashed #999}
-      h2{margin:0;text-align:center;font-size:18px}h3{text-align:center;margin:8px 0 22px;font-size:16px}table{width:100%;border-collapse:collapse}
-      td{padding:9px 6px;border-bottom:1px solid #ddd;font-size:14px}td:last-child{text-align:right}.tt td{font-size:16px;font-weight:bold;border-top:2px solid #111}
-      .sm{font-size:12px;color:#555}.sg{display:flex;justify-content:space-around;margin-top:34px;text-align:center;font-size:13px;height:90px}
-    </style></head><body>${rows.map(one).join('')}</body></html>`;
+  /* groups: [{ student, cls, items:[{month, present, absent, base, deduct, total, paid}] }]; o: { per: 1|2|4|6|8, printDate, showCode } */
+  const receiptsHTML = (groups, o, settings) => {
+    const per = o.per || 1, cols = per >= 4 ? 2 : 1, rowsN = per / cols;
+    const fs = { 1: 14, 2: 12.5, 4: 11, 6: 10, 8: 9 }[per] || 12;
+    const one = (g) => {
+      const tot = g.items.reduce((a, r) => a + r.total, 0), owe = g.items.filter((r) => !r.paid).reduce((a, r) => a + r.total, 0);
+      const multi = g.items.length > 1;
+      const title = multi ? 'PHIẾU THU HỌC PHÍ' : `PHIẾU THU HỌC PHÍ - ${U.monthLabel(g.items[0].month).toUpperCase()}`;
+      return `<div class="rc"><h2>${esc(settings.centerName)}</h2><h3>${title}</h3>
+        <div class="who">Học sinh: <b>${esc(g.student.name)}</b> · Lớp: ${esc(g.cls.name)}${o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>
+        <table class="m"><thead><tr><th>Tháng</th><th>Có mặt / Vắng</th><th>Học phí</th><th>Trừ</th><th>Phải đóng</th><th>TT</th></tr></thead><tbody>
+        ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}</td><td class="c">${r.present} / ${r.absent}</td><td class="r">${money(r.base)}</td><td class="r">${r.deduct ? '-' + money(r.deduct) : '0'}</td><td class="r"><b>${money(r.total)}</b></td><td class="c">${r.paid ? 'Đã đóng' : 'Chưa'}</td></tr>`).join('')}</tbody>
+        <tfoot><tr class="tt"><td colspan="4">${multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG'}</td><td class="r" colspan="2">${money(tot)}</td></tr>${multi && owe !== tot ? `<tr class="tt"><td colspan="4">CÒN PHẢI ĐÓNG</td><td class="r" colspan="2">${money(owe)}</td></tr>` : ''}</tfoot></table>
+        <p class="sm">${esc(U.feeRuleText(g.cls, settings))}</p>
+        <div class="sg"><div>Phụ huynh<br><i>(ký, ghi rõ họ tên)</i></div><div>Người thu tiền<br><i>(ký, ghi rõ họ tên)</i></div></div>
+        ${o.printDate ? `<div class="pd">Ngày in: ${U.fmtDate(U.today())}</div>` : ''}</div>`;
+    };
+    const pages = [];
+    for (let i = 0; i < groups.length; i += per) pages.push(`<div class="pg">${groups.slice(i, i + per).map(one).join('')}</div>`);
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Phiếu thu học phí</title><style>
+      @page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:${fs}px}
+      .pg{width:210mm;height:297mm;padding:8mm;display:grid;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rowsN},1fr);gap:4mm;page-break-after:always}
+      .rc{border:1px dashed #999;padding:${per === 1 ? '28px 26px' : '3.5mm 4mm'};overflow:hidden;display:flex;flex-direction:column}
+      h2{margin:0;text-align:center;font-size:${fs + 4}px}h3{text-align:center;margin:${per === 1 ? '8px 0 18px' : '3px 0 6px'};font-size:${fs + 2}px}
+      .who{margin-bottom:${per === 1 ? 10 : 5}px}table.m{width:100%;border-collapse:collapse}
+      .m th,.m td{padding:${per === 1 ? '7px 5px' : '2.5px 3px'};border-bottom:1px solid #ccc;text-align:left}.m th{background:#f1f4f9;font-size:${fs - 1}px}
+      .m .c{text-align:center}.m .r{text-align:right;white-space:nowrap}.tt td{font-weight:bold;border-top:2px solid #111;font-size:${fs + 1}px}
+      .sm{font-size:${fs - 1.5}px;color:#555;margin:6px 0}.sg{display:flex;justify-content:space-around;text-align:center;font-size:${fs - 1}px;margin-top:auto;height:${per === 1 ? 110 : per <= 4 ? 60 : 46}px}.pd{text-align:right;font-size:${fs - 2}px;color:#666}
+    </style></head><body>${pages.join('')}</body></html>`;
   };
+  const receiptHTML = (rows, month, settings) => receiptsHTML(rows.map((r) => ({ student: r.student, cls: r.cls, items: [{ month, present: r.present, absent: r.absent, base: r.base, deduct: r.deduct, total: r.total, paid: r.paid }] })), { per: 1 }, settings);
 
   Views.tuition = async (root, params) => {
     const classes = App.classes;
@@ -658,6 +674,51 @@
         },
       });
     };
+    const printDialog = () => {
+      const cl = classes.filter((c) => !st.classId || c.id === st.classId);
+      const starts = cl.map((c) => c.startDate).filter(Boolean).sort();
+      const cur = U.today().slice(0, 7);
+      const months = [];
+      for (let m = cur; m >= (starts[0] ? starts[0].slice(0, 7) : U.addMonth(cur, -11)) && months.length < 24; m = U.addMonth(m, -1)) months.push(m);
+      if (!months.includes(st.month)) months.unshift(st.month);
+      const m = U.modal({
+        title: 'In phiếu thu học phí', okText: 'In', wide: true,
+        body: `<label class="f">Chọn các tháng cần in</label>
+          <div class="row" style="margin-bottom:6px"><button type="button" class="btn sm soft" data-m="all">Chọn tất cả</button><button type="button" class="btn sm ghost" data-m="none">Bỏ chọn</button><button type="button" class="btn sm ghost" data-m="debt">Chỉ các tháng còn học sinh chưa đóng</button></div>
+          <div class="rp-tests" style="max-height:30vh">${months.map((x) => `<label class="ck"><input type="checkbox" data-mo="${x}" ${x === st.month ? 'checked' : ''}> ${U.monthLabel(x)}</label>`).join('')}</div>
+          <div class="hint">Mỗi học sinh một phiếu, gộp các tháng đã chọn và có dòng tổng cộng.</div>
+          <div class="form-grid" style="margin-top:12px">
+            <div><label class="f">Số phiếu trên một tờ A4</label><select class="select" id="pper"><option value="1">1 phiếu (khổ lớn)</option><option value="2">2 phiếu (trên - dưới)</option><option value="4" selected>4 phiếu (2 hàng x 2 cột)</option><option value="6">6 phiếu (3 hàng x 2 cột)</option><option value="8">8 phiếu (4 hàng x 2 cột)</option></select></div>
+            <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="punpaid"> Chỉ in các tháng chưa đóng</label><label class="ck"><input type="checkbox" id="pcode" checked> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="pdate"> Ghi ngày in trên phiếu</label></div>
+          </div>
+          <div class="small muted" style="margin-top:8px">Phạm vi: ${st.classId ? 'lớp đang chọn' : 'tất cả các lớp'}. Khi in nhiều tháng cùng lúc, nên chọn 1 - 4 phiếu mỗi tờ để đủ chỗ.</div>`,
+        onOk: async (w) => {
+          const picked = [...w.querySelectorAll('[data-mo]:checked')].map((x) => x.dataset.mo).sort();
+          if (!picked.length) throw new Error('Hãy chọn ít nhất một tháng.');
+          const onlyUnpaid = w.querySelector('#punpaid').checked;
+          const pays = await DB.q('payments');
+          const byS = new Map();
+          picked.forEach((mo) => U.tuitionRows({ classes: cl, students, attendance, payments: pays, settings: App.settings, month: mo }).forEach((r) => {
+            if (onlyUnpaid && r.paid) return;
+            const g = byS.get(r.student.id) || { student: r.student, cls: r.cls, items: [] };
+            g.items.push({ month: mo, present: r.present, absent: r.absent, base: r.base, deduct: r.deduct, total: r.total, paid: r.paid });
+            byS.set(r.student.id, g);
+          }));
+          const vnKey = (g) => { const x = g.student.name.trim().split(/\s+/); return x[x.length - 1] + ' ' + g.student.name; };
+          const groups = [...byS.values()].sort((a, b) => a.cls.grade - b.cls.grade || a.cls.code.localeCompare(b.cls.code) || vnKey(a).localeCompare(vnKey(b), 'vi'));
+          if (!groups.length) throw new Error(onlyUnpaid ? 'Không có học sinh nào chưa đóng trong các tháng đã chọn.' : 'Không có dữ liệu học phí để in.');
+          U.printHTML(receiptsHTML(groups, { per: Number(w.querySelector('#pper').value), printDate: w.querySelector('#pdate').checked, showCode: w.querySelector('#pcode').checked }, App.settings));
+        },
+      });
+      m.el.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-m]'); if (!b) return;
+        const boxes = [...m.el.querySelectorAll('[data-mo]')];
+        if (b.dataset.m === 'debt') {
+          const pays = await DB.q('payments');
+          boxes.forEach((x) => { x.checked = U.tuitionRows({ classes: cl, students, attendance, payments: pays, settings: App.settings, month: x.dataset.mo }).some((r) => !r.paid); });
+        } else boxes.forEach((x) => { x.checked = b.dataset.m === 'all'; });
+      });
+    };
     const exportDialog = () => {
       const cl = classes.filter((c) => !st.classId || c.id === st.classId);
       const m = U.modal({
@@ -665,7 +726,7 @@
         body: `${U.periodHtml({ month: st.month })}
           <div class="hint">Học sinh vào học giữa kỳ chỉ tính từ ngày bắt đầu học; nhiều tháng thì cộng dồn từng tháng.</div>
           <label class="f" style="margin-top:12px">Ghi kèm</label>
-          <div class="row"><label class="ck"><input type="checkbox" id="xn" checked> Tên lớp</label><label class="ck"><input type="checkbox" id="xc" checked> Mã lớp</label></div>
+          <div class="row"><label class="ck"><input type="checkbox" id="xn" checked> Tên lớp</label><label class="ck"><input type="checkbox" id="xc" checked> Mã lớp</label><label class="ck"><input type="checkbox" id="xd" ${App.settings.showPrintDate ? 'checked' : ''}> Ghi ngày in ở chân trang</label></div>
           <div class="small muted" style="margin-top:8px">Phạm vi: ${st.classId ? 'lớp đang chọn' : 'tất cả các lớp'}</div>`,
         onOk: async (w) => {
           const per = U.periodGet(w.querySelector('.period'), cl);
@@ -674,7 +735,7 @@
           if (!rows.length) throw new Error('Không có dữ liệu học phí trong kỳ này.');
           const vnKey = (r) => { const x = r.student.name.trim().split(/\s+/); return x[x.length - 1] + ' ' + r.student.name; };
           rows.sort((a, b) => a.cls.grade - b.cls.grade || a.cls.code.localeCompare(b.cls.code) || vnKey(a).localeCompare(vnKey(b), 'vi'));
-          await X.exportTuition(rows, per.month || per.from.slice(0, 7), App.settings, { label: per.label, file: `Hoc_phi_${per.file}.xlsx`, showName: w.querySelector('#xn').checked, showCode: w.querySelector('#xc').checked });
+          await X.exportTuition(rows, per.month || per.from.slice(0, 7), App.settings, { label: per.label, file: `Hoc_phi_${per.file}.xlsx`, showName: w.querySelector('#xn').checked, showCode: w.querySelector('#xc').checked, printDate: w.querySelector('#xd').checked });
         },
       });
       U.periodBind(m.el.querySelector('.period'), cl);
@@ -709,7 +770,7 @@
       }
       if (pr) U.printHTML(receiptHTML([find(pr.dataset.print)], st.month, App.settings));
       if (t.closest('#imp')) { root.querySelector('#tfile').click(); return; }
-      if (t.closest('#printall')) U.printHTML(receiptHTML(compute().rows, st.month, App.settings));
+      if (t.closest('#printall')) printDialog();
       if (t.closest('#exp')) exportDialog();
     };
     const reload = async () => { root.querySelector('.card.toolbar') && (root.style.opacity = .6); await load(); root.style.opacity = 1; render(); };
@@ -1179,6 +1240,7 @@
           <div><label class="f">Số phút của 1 tiết</label><input class="input" type="number" min="15" max="120" step="5" id="pm" value="${esc(s.periodMinutes || 45)}"><div class="hint">Dùng để gợi ý số tiết mỗi buổi (ví dụ 17:30-19:00 = 2 tiết).</div></div>
           <div><label class="f">Bắt đầu trừ tiền khi vắng từ (buổi)</label><input class="input" type="number" min="1" max="20" id="dfrom" value="${esc(s.deductFrom)}"><div class="hint">Ví dụ 2: vắng 1 buổi không trừ, vắng từ 2 buổi trở lên mới trừ.</div></div>
           <div><label class="f">Số tiền trừ mỗi buổi vắng (đ)</label><input class="input" type="number" min="0" step="1000" id="damt" value="${esc(s.deductAmount)}"><div class="hint">Nhập 0 nếu không trừ tiền khi vắng.</div></div>
+          <div class="full"><label class="ck"><input type="checkbox" id="spd" ${s.showPrintDate ? 'checked' : ''}> Ghi dòng "In ngày …" ở chân trang các bảng Excel khi in</label></div>
           <div class="full"><div class="alert" id="ex"></div></div>
         </div><div class="row mt"><button class="btn" id="save">${icon('check')} Lưu cài đặt</button></div></div></div>
       <div class="card"><div class="card-h"><h3>Dữ liệu & hệ thống</h3></div><div class="card-b">
@@ -1202,6 +1264,7 @@
         periodMinutes: Math.max(15, Number(root.querySelector('#pm').value) || 45),
         deductFrom: Math.max(1, Math.floor(Number(root.querySelector('#dfrom').value) || 1)),
         deductAmount: Math.max(0, Number(root.querySelector('#damt').value) || 0),
+        showPrintDate: root.querySelector('#spd').checked,
       };
       try { await DB.save('settings', 'main', data); App.settings = { ...U.DEFAULT_SETTINGS, ...data }; U.toast('Đã lưu cài đặt', 'ok'); App.renderShellTitle(); } catch (e) { U.toast(e.message, 'err'); }
     };

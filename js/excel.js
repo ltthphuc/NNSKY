@@ -127,7 +127,8 @@
     ws.views = [{ state: 'frozen', xSplit: s.freezeCols || 0, ySplit: headerRow, showGridLines: false }];
     if (s.rows.length) ws.autoFilter = { from: { row: headerRow, column: 1 }, to: { row: headerRow + s.rows.length, column: n } };
     ws.pageSetup.printTitlesRow = `${headerRow}:${headerRow}`;
-    ws.headerFooter = { oddFooter: `&L&8${center()}&C&8Trang &P / &N&R&8In ngày &D` };
+    const pd = s.printDate !== undefined ? s.printDate : !!(window.App && App.settings && App.settings.showPrintDate);
+    ws.headerFooter = { oddFooter: `&L&8${center()}&C&8Trang &P / &N${pd ? '&R&8In ngày &D' : ''}` };
     return { ws, headerRow, firstRow };
   }
 
@@ -431,7 +432,7 @@
       name: 'Học phí', title: `BẢNG HỌC PHÍ ${label.toUpperCase()}`, info: [`Số học sinh: ${rows.length} · Đã đóng: ${rows.filter((r) => r.paid).length}`],
       cols, rows: data,
       total: cols.map((c, i) => (i === 2 ? 'TỔNG CỘNG' : sums[i] ? data.reduce((p, r) => p + (Number(r[i]) || 0), 0) : '')),
-      notes: classes.map((c) => `${clsText(c)}: ${U.feeRuleText(c, settings)}`), freezeCols: 3, signature: true,
+      notes: classes.map((c) => `${clsText(c)}: ${U.feeRuleText(c, settings)}`), freezeCols: 3, signature: true, printDate: opt.printDate,
     });
     await saveBook(wb, opt.file || `Hoc_phi_${month}.xlsx`);
   });
@@ -538,7 +539,7 @@
       const sig = (col, t1, t2) => { const a = ws.getCell(r, col), b = ws.getCell(r + 1, col); a.value = t1; a.font = { name: FONT, bold: true, size: 10, color: { argb: NAVY } }; a.alignment = { horizontal: 'center' }; b.value = t2; b.font = { name: FONT, italic: true, size: 8.5, color: { argb: GRAYTXT } }; b.alignment = { horizontal: 'center' }; };
       sig(1, 'Giáo viên', '(ký, ghi rõ họ tên)'); sig(n, 'Phụ huynh', '(ký, ghi rõ họ tên)');
       ws.getRow(r + 1).height = 15;
-      ws.headerFooter = { oddFooter: `&L&8${c.center}&R&8Ngày xuất ${U.fmtDate(U.today())}` };
+      ws.headerFooter = { oddFooter: `&L&8${c.center}${App.settings && App.settings.showPrintDate ? '&R&8Ngày xuất ' + U.fmtDate(U.today()) : ''}` };
     });
     await saveBook(wb, filename);
   });

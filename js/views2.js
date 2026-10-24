@@ -565,37 +565,72 @@
   /* ===================================================================
    *  HỌC PHÍ
    * =================================================================== */
-  /* groups: [{ student, cls, items:[{month, present, absent, base, deduct, total, paid}] }]; o: { per: 1|2|4|6|8, printDate, showCode } */
+  /* Hình chibi trang trí (SVG) cho phiếu thu / phiếu báo học phí */
+  const CHIBI = {
+    boy: '<svg viewBox="0 0 64 64"><circle cx="32" cy="35" r="22" fill="#ffe0c2"/><path d="M10 33c0-17 12-25 22-25s22 8 22 25c-6-9-14-11-22-11s-16 2-22 11z" fill="#3b2a20"/><ellipse cx="24" cy="37" rx="3.2" ry="4.2" fill="#222"/><ellipse cx="40" cy="37" rx="3.2" ry="4.2" fill="#222"/><circle cx="25.2" cy="35.5" r="1.3" fill="#fff"/><circle cx="41.2" cy="35.5" r="1.3" fill="#fff"/><ellipse cx="17.5" cy="44" rx="4" ry="2.6" fill="#ff9db0" opacity=".85"/><ellipse cx="46.5" cy="44" rx="4" ry="2.6" fill="#ff9db0" opacity=".85"/><path d="M27 46q5 5 10 0" stroke="#c0504d" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+    girl: '<svg viewBox="0 0 64 64"><circle cx="8" cy="34" r="7" fill="#6b3f2a"/><circle cx="56" cy="34" r="7" fill="#6b3f2a"/><circle cx="32" cy="36" r="21" fill="#ffe0c2"/><path d="M11 34c0-17 10-25 21-25s21 8 21 25c-5-8-13-10-21-10s-16 2-21 10z" fill="#6b3f2a"/><path d="M26 11l6 5 6-5-2 8h-8z" fill="#ff6fa5"/><circle cx="32" cy="15" r="2.4" fill="#ff3d86"/><ellipse cx="24" cy="38" rx="3.2" ry="4.2" fill="#222"/><ellipse cx="40" cy="38" rx="3.2" ry="4.2" fill="#222"/><circle cx="25.2" cy="36.5" r="1.3" fill="#fff"/><circle cx="41.2" cy="36.5" r="1.3" fill="#fff"/><ellipse cx="17.5" cy="45" rx="4" ry="2.6" fill="#ff9db0" opacity=".85"/><ellipse cx="46.5" cy="45" rx="4" ry="2.6" fill="#ff9db0" opacity=".85"/><path d="M27 47q5 5 10 0" stroke="#c0504d" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+    star: '<svg viewBox="0 0 64 64"><path d="M32 5l7.5 17.5 19 1.6-14.4 12.4 4.4 18.5L32 45.6 15.5 55l4.4-18.5L5.5 24.1l19-1.6z" fill="#ffd54a" stroke="#f5a623" stroke-width="2.5" stroke-linejoin="round"/><ellipse cx="26" cy="31" rx="2.2" ry="3" fill="#5a3b00"/><ellipse cx="38" cy="31" rx="2.2" ry="3" fill="#5a3b00"/><ellipse cx="22" cy="37" rx="3" ry="2" fill="#ff9db0"/><ellipse cx="42" cy="37" rx="3" ry="2" fill="#ff9db0"/><path d="M28 37q4 4 8 0" stroke="#a5521d" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>',
+    cloud: '<svg viewBox="0 0 64 64"><path d="M17 46a11 11 0 0 1 1-22 14 14 0 0 1 27-3 12 12 0 0 1 2 25z" fill="#fff" stroke="#8ec9ff" stroke-width="3" stroke-linejoin="round"/><ellipse cx="26" cy="36" rx="2" ry="2.8" fill="#35557a"/><ellipse cx="38" cy="36" rx="2" ry="2.8" fill="#35557a"/><ellipse cx="22" cy="41" rx="3" ry="2" fill="#ffb3c7"/><ellipse cx="42" cy="41" rx="3" ry="2" fill="#ffb3c7"/><path d="M28.5 41q3.5 3.5 7 0" stroke="#35557a" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>',
+    pencil: '<svg viewBox="0 0 64 64"><g transform="rotate(40 32 32)"><rect x="25" y="6" width="14" height="40" rx="2" fill="#ffb13b" stroke="#e08a00" stroke-width="2"/><rect x="25" y="6" width="14" height="7" fill="#ff7aa8"/><path d="M25 46h14l-7 13z" fill="#ffe0c2" stroke="#e0b88a" stroke-width="1.5"/><path d="M29.5 54h5l-2.5 5z" fill="#333"/></g></svg>',
+    book: '<svg viewBox="0 0 64 64"><path d="M6 14c8-3 18-3 26 3v38c-8-6-18-6-26-3z" fill="#7ec8ff" stroke="#3b8fd6" stroke-width="2.5" stroke-linejoin="round"/><path d="M58 14c-8-3-18-3-26 3v38c8-6 18-6 26-3z" fill="#b8e4ff" stroke="#3b8fd6" stroke-width="2.5" stroke-linejoin="round"/><path d="M13 24c4-1 8-1 12 1M13 32c4-1 8-1 12 1M39 25c4-2 8-2 12-1M39 33c4-2 8-2 12-1" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+  };
+
+  /* groups: [{ student, cls, items:[{month, present, absent, base, deduct, total, paid, note}] }]
+   * o: { per: 1|2|4|6|8, kind: 'thu'|'bao', printDate, showCode, chibi } */
   const receiptsHTML = (groups, o, settings) => {
-    const per = o.per || 1, cols = per >= 4 ? 2 : 1, rowsN = per / cols;
-    const fs = { 1: 14, 2: 12.5, 4: 11, 6: 10, 8: 9 }[per] || 12;
-    const one = (g) => {
+    const per = o.per || 1, cols = per >= 4 ? 2 : 1, rowsN = per / cols, bao = o.kind === 'bao', chibi = o.chibi !== false;
+    const fs = { 1: 17, 2: 14, 4: 11.5, 6: 10.5, 8: 9.5 }[per] || 12;
+    const sz = { 1: 76, 2: 56, 4: 46, 6: 38, 8: 34 }[per] || 40;
+    const one = (g, idx) => {
       const tot = g.items.reduce((a, r) => a + r.total, 0), owe = g.items.filter((r) => !r.paid).reduce((a, r) => a + r.total, 0);
       const multi = g.items.length > 1;
-      const title = multi ? 'PHIẾU THU HỌC PHÍ' : `PHIẾU THU HỌC PHÍ - ${U.monthLabel(g.items[0].month).toUpperCase()}`;
-      return `<div class="rc"><h2>${esc(settings.centerName)}</h2><h3>${title}</h3>
-        <div class="who">Học sinh: <b>${esc(g.student.name)}</b> · Lớp: ${esc(g.cls.name)}${o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>
-        <table class="m"><thead><tr><th>Tháng</th><th>Có mặt / Vắng</th><th>Học phí</th><th>Trừ</th><th>Phải đóng</th><th>TT</th></tr></thead><tbody>
-        ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}</td><td class="c">${r.present} / ${r.absent}</td><td class="r">${money(r.base)}</td><td class="r">${r.deduct ? '-' + money(r.deduct) : '0'}</td><td class="r"><b>${money(r.total)}</b></td><td class="c">${r.paid ? 'Đã đóng' : 'Chưa'}</td></tr>`).join('')}</tbody>
-        <tfoot><tr class="tt"><td colspan="4">${multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG'}</td><td class="r" colspan="2">${money(tot)}</td></tr>${multi && owe !== tot ? `<tr class="tt"><td colspan="4">CÒN PHẢI ĐÓNG</td><td class="r" colspan="2">${money(owe)}</td></tr>` : ''}</tfoot></table>
-        <p class="sm">${esc(U.feeRuleText(g.cls, settings))}</p>
-        <div class="sg"><div>Phụ huynh<br><i>(ký, ghi rõ họ tên)</i></div><div>Người thu tiền<br><i>(ký, ghi rõ họ tên)</i></div></div>
-        ${o.printDate ? `<div class="pd">Ngày in: ${U.fmtDate(U.today())}</div>` : ''}</div>`;
+      const word = bao ? 'PHIẾU BÁO HỌC PHÍ' : 'PHIẾU THU HỌC PHÍ';
+      const title = multi ? word : `${word} - ${U.monthLabel(g.items[0].month).toUpperCase()}`;
+      const notes = [...new Set(g.items.map((r) => r.note).filter(Boolean))];
+      const deco = chibi ? `<i class="dc a" style="width:${sz}px;height:${sz}px">${idx % 2 ? CHIBI.girl : CHIBI.boy}</i><i class="dc b" style="width:${sz}px;height:${sz}px">${idx % 2 ? CHIBI.boy : CHIBI.girl}</i>
+        <i class="dc c" style="width:${sz * 0.85}px;height:${sz * 0.85}px">${CHIBI.star}</i><i class="dc d" style="width:${sz * 0.9}px;height:${sz * 0.9}px">${CHIBI.cloud}</i>
+        <i class="dc e" style="width:${sz * 0.62}px;height:${sz * 0.62}px">${CHIBI.pencil}</i><i class="dc f" style="width:${sz * 0.62}px;height:${sz * 0.62}px">${CHIBI.book}</i>` : '';
+      return `<div class="rc">${deco}<div class="in">
+        <div class="band"><div class="cn">${esc(settings.centerName)}</div><h3>${title}</h3></div>
+        ${bao ? `<div class="hi">Kính gửi Quý phụ huynh của em <b>${esc(g.student.name)}</b>,<br>Trung tâm xin thông báo học phí như sau:</div>` : ''}
+        <div class="who">${bao ? '' : `Học sinh: <b>${esc(g.student.name)}</b> · `}Lớp: <b>${esc(g.cls.name)}</b>${o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>
+        <table class="m"><thead><tr><th>Tháng</th><th>Có mặt / Vắng</th><th>Học phí</th><th>Trừ</th><th>Phải đóng</th><th>Tình trạng</th></tr></thead><tbody>
+        ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}</td><td class="c">${r.present} / ${r.absent}</td><td class="r">${money(r.base)}</td><td class="r">${r.deduct ? '-' + money(r.deduct) : '0'}</td><td class="r"><b>${money(r.total)}</b></td><td class="c"><span class="${r.paid ? 'ok' : 'no'}">${r.paid ? 'Đã đóng' : 'Chưa đóng'}</span></td></tr>`).join('')}</tbody></table>
+        <div class="tot"><span>${multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG'}</span><b>${money(tot)}</b></div>${multi && owe !== tot ? `<div class="tot owe"><span>CÒN PHẢI ĐÓNG</span><b>${money(owe)}</b></div>` : ''}
+        <p class="sm">${esc(U.feeRuleText(g.cls, settings))}${notes.length ? '<br>' + notes.map(esc).join('<br>') : ''}</p>
+        ${bao ? `<div class="thx">Trân trọng cảm ơn Quý phụ huynh!</div><div class="sg one"><div>Trung tâm<br><i>(ký, đóng dấu)</i></div></div>`
+          : `<div class="sg"><div>Phụ huynh<br><i>(ký, ghi rõ họ tên)</i></div><div>Người thu tiền<br><i>(ký, ghi rõ họ tên)</i></div></div>`}
+        ${o.printDate ? `<div class="pd">Ngày in: ${U.fmtDate(U.today())}</div>` : ''}</div></div>`;
     };
     const pages = [];
-    for (let i = 0; i < groups.length; i += per) pages.push(`<div class="pg">${groups.slice(i, i + per).map(one).join('')}</div>`);
-    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Phiếu thu học phí</title><style>
-      @page{size:A4;margin:0}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:${fs}px}
-      .pg{width:210mm;height:297mm;padding:8mm;display:grid;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rowsN},1fr);gap:4mm;page-break-after:always}
-      .rc{border:1px dashed #999;padding:${per === 1 ? '28px 26px' : '3.5mm 4mm'};overflow:hidden;display:flex;flex-direction:column}
-      h2{margin:0;text-align:center;font-size:${fs + 4}px}h3{text-align:center;margin:${per === 1 ? '8px 0 18px' : '3px 0 6px'};font-size:${fs + 2}px}
-      .who{margin-bottom:${per === 1 ? 10 : 5}px}table.m{width:100%;border-collapse:collapse}
-      .m th,.m td{padding:${per === 1 ? '7px 5px' : '2.5px 3px'};border-bottom:1px solid #ccc;text-align:left}.m th{background:#f1f4f9;font-size:${fs - 1}px}
-      .m .c{text-align:center}.m .r{text-align:right;white-space:nowrap}.tt td{font-weight:bold;border-top:2px solid #111;font-size:${fs + 1}px}
-      .sm{font-size:${fs - 1.5}px;color:#555;margin:6px 0}.sg{display:flex;justify-content:space-around;text-align:center;font-size:${fs - 1}px;margin-top:auto;height:${per === 1 ? 110 : per <= 4 ? 60 : 46}px}.pd{text-align:right;font-size:${fs - 2}px;color:#666}
+    for (let i = 0; i < groups.length; i += per) pages.push(`<div class="pg">${groups.slice(i, i + per).map((g, k) => one(g, i + k)).join('')}</div>`);
+    const pad = per === 1 ? '22px 26px' : '2.5mm 3.5mm';
+    return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${bao ? 'Phiếu báo học phí' : 'Phiếu thu học phí'}</title><style>
+      @page{size:A4;margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:"Segoe UI",Arial,sans-serif;color:#1f2d44;margin:0;font-size:${fs}px}
+      .pg{width:210mm;height:297mm;padding:9mm;display:grid;grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rowsN},1fr);gap:6mm;page-break-after:always}
+      .rc{position:relative;border:2.5px solid #6ab7ff;border-radius:14px;background:linear-gradient(180deg,#fffdf5 0%,#f3faff 100%);outline:2px dashed #ffb3d1;outline-offset:2px;min-height:0}
+      .in{height:100%;padding:${pad};overflow:hidden;display:flex;flex-direction:column;border-radius:12px}
+      .dc{position:absolute;display:block;z-index:2}.dc svg{width:100%;height:100%;display:block}
+      .dc.a{left:-${sz * 0.28}px;top:-${sz * 0.34}px}.dc.b{right:-${sz * 0.28}px;top:-${sz * 0.34}px}.dc.c{left:-${sz * 0.2}px;bottom:-${sz * 0.3}px}.dc.d{right:-${sz * 0.22}px;bottom:-${sz * 0.32}px}
+      .dc.e{left:${sz * 0.9}px;bottom:-${sz * 0.24}px}.dc.f{right:${sz * 0.9}px;bottom:-${sz * 0.24}px}
+      .band{background:linear-gradient(90deg,#4facfe 0%,#8a7bf0 55%,#ff8fc7 100%);color:#fff;border-radius:10px;text-align:center;padding:${per === 1 ? '10px 8px' : '3px 6px'};margin:${per === 1 ? '0 ' + sz * 0.5 + 'px 12px' : '0 ' + sz * 0.45 + 'px 5px'}}
+      .cn{font-size:${fs}px;font-weight:600;opacity:.95}h3{margin:1px 0 0;font-size:${fs + 3}px;letter-spacing:.4px}
+      .hi{margin:2px 0 4px;font-size:${fs}px;line-height:1.35}.who{margin:${per === 1 ? '4px 0 10px' : '2px 0 5px'};text-align:center}
+      table.m{width:100%;border-collapse:separate;border-spacing:0;border-radius:8px;overflow:hidden;border:1px solid #cfe3f7}
+      .m th{background:#dff0ff;color:#1b4f86;font-size:${fs - 1}px;padding:${per === 1 ? '7px 5px' : '2px 3px'}}
+      .m td{padding:${per === 1 ? '7px 5px' : '2px 3px'};border-top:1px solid #e4effa;text-align:left}.m tr:nth-child(even) td{background:#f7fbff}
+      .m .c{text-align:center}.m .r{text-align:right;white-space:nowrap}
+      .ok{color:#0e7a3e;font-weight:700}.no{color:#d9730d;font-weight:700}
+      .tot{display:flex;justify-content:space-between;align-items:center;margin-top:${per === 1 ? 10 : 4}px;padding:${per === 1 ? '9px 14px' : '3px 8px'};border-radius:10px;background:linear-gradient(90deg,#ffe58a,#ffc2de);color:#7a2250;font-size:${fs + 1}px}
+      .tot b{font-size:${fs + 3}px}.tot.owe{background:linear-gradient(90deg,#ffd9b0,#ffb3b3);color:#8a1f11;margin-top:3px}
+      .sm{font-size:${fs - 1.5}px;color:#5b6b85;margin:${per === 1 ? '10px 0' : '3px 0'}}
+      .thx{text-align:center;color:#c2185b;font-weight:600;margin-top:2px}
+      .sg{display:flex;justify-content:space-around;text-align:center;font-size:${fs - 1}px;margin-top:auto;height:${per === 1 ? 100 : per <= 4 ? 52 : 40}px}.sg.one{justify-content:flex-end;padding-right:12%}.pd{text-align:right;font-size:${fs - 2}px;color:#8a97ad}
     </style></head><body>${pages.join('')}</body></html>`;
   };
-  const receiptHTML = (rows, month, settings) => receiptsHTML(rows.map((r) => ({ student: r.student, cls: r.cls, items: [{ month, present: r.present, absent: r.absent, base: r.base, deduct: r.deduct, total: r.total, paid: r.paid }] })), { per: 1 }, settings);
+  const receiptHTML = (rows, month, settings, o = {}) => receiptsHTML(rows.map((r) => ({ student: r.student, cls: r.cls, items: [{ month, present: r.present, absent: r.absent, base: r.base, deduct: r.deduct, total: r.total, paid: r.paid, note: joinNote(r) }] })), { per: 1, ...o }, settings);
+  /* ghi chú khi học sinh vào học giữa tháng: học phí chỉ tính từ ngày vào học */
+  const joinNote = (r) => (r.student.startDate && r.ratio < 1 && r.classScheduled ? `${r.student.name} vào học từ ${U.fmtDate(r.student.startDate)}: tính ${r.scheduled}/${r.classScheduled} buổi của tháng.` : '');
 
   Views.tuition = async (root, params) => {
     const classes = App.classes;
@@ -688,8 +723,9 @@
           <div class="rp-tests" style="max-height:30vh">${months.map((x) => `<label class="ck"><input type="checkbox" data-mo="${x}" ${x === st.month ? 'checked' : ''}> ${U.monthLabel(x)}</label>`).join('')}</div>
           <div class="hint">Mỗi học sinh một phiếu, gộp các tháng đã chọn và có dòng tổng cộng.</div>
           <div class="form-grid" style="margin-top:12px">
-            <div><label class="f">Số phiếu trên một tờ A4</label><select class="select" id="pper"><option value="1">1 phiếu (khổ lớn)</option><option value="2">2 phiếu (trên - dưới)</option><option value="4" selected>4 phiếu (2 hàng x 2 cột)</option><option value="6">6 phiếu (3 hàng x 2 cột)</option><option value="8">8 phiếu (4 hàng x 2 cột)</option></select></div>
-            <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="punpaid"> Chỉ in các tháng chưa đóng</label><label class="ck"><input type="checkbox" id="pcode" checked> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="pdate"> Ghi ngày in trên phiếu</label></div>
+            <div><label class="f">Tiêu đề phiếu</label><select class="select" id="pkind"><option value="thu">Phiếu thu học phí (thu tại trung tâm)</option><option value="bao">Phiếu báo học phí (gửi về nhà cho phụ huynh)</option></select>
+              <label class="f" style="margin-top:10px">Số phiếu trên một tờ A4</label><select class="select" id="pper"><option value="1">1 phiếu (khổ lớn)</option><option value="2">2 phiếu (trên - dưới)</option><option value="4" selected>4 phiếu (2 hàng x 2 cột)</option><option value="6">6 phiếu (3 hàng x 2 cột)</option><option value="8">8 phiếu (4 hàng x 2 cột)</option></select></div>
+            <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="punpaid"> Chỉ in các tháng chưa đóng</label><label class="ck"><input type="checkbox" id="pcode" checked> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="pchibi" checked> Hình chibi trang trí</label><label class="ck"><input type="checkbox" id="pdate"> Ghi ngày in trên phiếu</label></div>
           </div>
           <div class="small muted" style="margin-top:8px">Phạm vi: ${st.classId ? 'lớp đang chọn' : 'tất cả các lớp'}. Khi in nhiều tháng cùng lúc, nên chọn 1 - 4 phiếu mỗi tờ để đủ chỗ.</div>`,
         onOk: async (w) => {
@@ -701,13 +737,13 @@
           picked.forEach((mo) => U.tuitionRows({ classes: cl, students, attendance, payments: pays, settings: App.settings, month: mo }).forEach((r) => {
             if (onlyUnpaid && r.paid) return;
             const g = byS.get(r.student.id) || { student: r.student, cls: r.cls, items: [] };
-            g.items.push({ month: mo, present: r.present, absent: r.absent, base: r.base, deduct: r.deduct, total: r.total, paid: r.paid });
+            g.items.push({ month: mo, present: r.present, absent: r.absent, base: r.base, deduct: r.deduct, total: r.total, paid: r.paid, note: joinNote(r) });
             byS.set(r.student.id, g);
           }));
           const vnKey = (g) => { const x = g.student.name.trim().split(/\s+/); return x[x.length - 1] + ' ' + g.student.name; };
           const groups = [...byS.values()].sort((a, b) => a.cls.grade - b.cls.grade || a.cls.code.localeCompare(b.cls.code) || vnKey(a).localeCompare(vnKey(b), 'vi'));
           if (!groups.length) throw new Error(onlyUnpaid ? 'Không có học sinh nào chưa đóng trong các tháng đã chọn.' : 'Không có dữ liệu học phí để in.');
-          U.printHTML(receiptsHTML(groups, { per: Number(w.querySelector('#pper').value), printDate: w.querySelector('#pdate').checked, showCode: w.querySelector('#pcode').checked }, App.settings));
+          U.printHTML(receiptsHTML(groups, { per: Number(w.querySelector('#pper').value), kind: w.querySelector('#pkind').value, chibi: w.querySelector('#pchibi').checked, printDate: w.querySelector('#pdate').checked, showCode: w.querySelector('#pcode').checked }, App.settings));
         },
       });
       m.el.addEventListener('click', async (e) => {

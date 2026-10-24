@@ -3,7 +3,7 @@
   const { esc, icon } = U;
   const KEY = 'sky_report_opts_v1';
   const DEFAULTS = {
-    code: true, cls: true, phone: true, cccd: false, note: false, status: false,
+    code: true, cname: true, ccode: true, phone: true, cccd: false, note: false, status: false,
     scores: true, avg: true, comments: false, att: true, absent: true, detail: false,
     tuition: true, base: true, deduct: true, total: true, paid: true, testScope: 'all',
   };
@@ -13,10 +13,10 @@
   const MONEY = '#,##0" đ"';
 
   const GROUPS = [
-    ['Thông tin học sinh', [['code', 'Mã học sinh'], ['cls', 'Lớp'], ['sdate', 'Ngày bắt đầu học'], ['phone', 'Số điện thoại'], ['cccd', 'CCCD'], ['note', 'Ghi chú'], ['status', 'Trạng thái (đang học / đã nghỉ)']]],
+    ['Thông tin học sinh', [['code', 'Mã học sinh'], ['sdate', 'Ngày bắt đầu học'], ['phone', 'Số điện thoại'], ['cccd', 'CCCD'], ['note', 'Ghi chú'], ['status', 'Trạng thái (đang học / đã nghỉ)']]],
     ['Điểm các bài kiểm tra', [['scores', 'Điểm từng bài kiểm tra'], ['avg', 'Điểm trung bình'], ['comments', 'Kèm nhận xét của từng bài']]],
     ['Điểm danh', [['att', 'Số buổi đi học'], ['absent', 'Số buổi vắng'], ['detail', 'Chi tiết từng buổi (✓ / V)']]],
-    ['Học phí của tháng', [['tuition', 'Hiện mục học phí'], ['base', 'Học phí gốc của lớp'], ['deduct', 'Số tiền giảm / trừ'], ['total', 'Số tiền phải đóng'], ['paid', 'Trạng thái đã đóng']]],
+    ['Học phí của kỳ đã chọn', [['tuition', 'Hiện mục học phí'], ['base', 'Học phí gốc của lớp'], ['deduct', 'Số tiền giảm / trừ'], ['total', 'Số tiền phải đóng'], ['paid', 'Trạng thái đã đóng']]],
   ];
 
   const R_GROUPS = [
@@ -60,9 +60,10 @@
           <label class="ck"><input type="radio" name="rmode" value="result" ${o0.mode === 'result' ? 'checked' : ''}> <span><b>Bảng kết quả học tập</b><small>mỗi học sinh một trang, xếp dọc</small></span></label>
           <label class="ck"><input type="radio" name="rmode" value="cert" ${o0.mode === 'cert' ? 'checked' : ''}> <span><b>Giấy chứng nhận hoàn thành khóa học</b><small>mỗi học sinh một giấy</small></span></label>
         </div></div>
+        <div class="full"><label class="f">Ghi kèm trên báo cáo</label><div class="row">${chk('cname', 'Tên lớp (ví dụ Lớp 3)')}${chk('ccode', 'Mã lớp (ví dụ SKY-AB123)')}</div></div>
         <div class="full"><label class="f">Xuất cho</label><div class="row">${scopes.map((sc, i) => `<label class="ck"><input type="radio" name="rscope" value="${sc.v}" ${i === 0 ? 'checked' : ''}> ${esc(sc.t)}</label>`).join('')}</div></div>
-        <div data-modes="table"><label class="f">Tháng (điểm danh và học phí)</label><input class="input" type="month" id="rmonth" value="${today.slice(0, 7)}"></div>
-        <div data-modes="table"><label class="f">Phạm vi bài kiểm tra</label><select class="select" id="rtest"><option value="all" ${o0.testScope === 'all' ? 'selected' : ''}>Tất cả các bài</option><option value="month" ${o0.testScope === 'month' ? 'selected' : ''}>Chỉ các bài trong tháng đã chọn</option></select></div>
+        <div data-modes="table" class="full" id="rperiod">${U.periodHtml()}</div>
+        <div data-modes="table"><label class="f">Phạm vi bài kiểm tra</label><select class="select" id="rtest"><option value="all" ${o0.testScope === 'all' ? 'selected' : ''}>Tất cả các bài</option><option value="month" ${o0.testScope === 'month' ? 'selected' : ''}>Chỉ các bài trong kỳ đã chọn</option></select></div>
         <div data-modes="result"><label class="f">Từ ngày</label><input class="input" type="date" id="rfrom" value="${today.slice(0, 7)}-01"></div>
         <div data-modes="result"><label class="f">Đến ngày</label><input class="input" type="date" id="rto" value="${today}"></div>
       </div>
@@ -99,7 +100,8 @@
         if (!list.length) throw new Error('Không có học sinh nào để xuất.');
         const picked = new Set([...w.querySelectorAll('[data-t]:checked')].map((x) => x.dataset.t));
         if (mode === 'table') {
-          await build(list, o, w.querySelector('#rmonth').value || today.slice(0, 7), opts.all, admin);
+          const per = U.periodGet(w.querySelector('#rperiod .period'), candidate.map((id) => App.classById(id)).filter(Boolean));
+          await build(list, o, per, opts.all, admin);
         } else if (mode === 'result') {
           const from = w.querySelector('#rfrom').value, to = w.querySelector('#rto').value;
           if (!from || !to || from > to) throw new Error('Khoảng ngày không hợp lệ (ngày bắt đầu phải trước ngày kết thúc).');
@@ -117,6 +119,7 @@
     const issToggle = () => { issDate.style.display = issSel.value === 'custom' ? '' : 'none'; };
     issSel.onchange = issToggle; issToggle();
     m.el.querySelectorAll('[name=rmode]').forEach((r) => { r.onchange = setMode; });
+    U.periodBind(m.el.querySelector('#rperiod .period'));
     setMode();
     m.el.addEventListener('click', (e) => {
       const b = e.target.closest('[data-all]');
@@ -146,6 +149,7 @@
     assessments.filter((a) => a.classId === s.classId && picked.has(a.id) && (!from || a.date >= from) && (!to || a.date <= to))
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((a) => ({ title: a.title, date: a.date, score: a.scores && a.scores[s.id] != null && a.scores[s.id] !== '' ? Number(a.scores[s.id]) : '', comment: (a.comments && a.comments[s.id]) || '' }));
+  const clsText = (c, o) => [o.cname ? c.name : '', o.ccode && c.code ? (o.cname ? `(${c.code})` : c.code) : ''].filter(Boolean).join(' ') || c.name;
   const fname = (prefix, list) => {
     const classes = [...new Set(list.map((s) => s.classId))].map((id) => App.classById(id)).filter(Boolean);
     return `${prefix}_${list.length === 1 ? slug(list[0].name) : classes.length === 1 ? slug(classes[0].code) : 'hoc_sinh'}.xlsx`;
@@ -167,7 +171,7 @@
       const teacherName = [App.teacherName(c.teacherId), c.assistantId ? 'Trợ giảng: ' + App.teacherName(c.assistantId) : ''].filter(Boolean).join(' · ');
       return {
         center: App.settings.centerName, student: s, cls: c, teacherName, showCode: o.r_code, showTeacher: o.r_teacher,
-        subtitle: `${c.name} · từ ngày ${U.fmtDate(from)} đến ngày ${U.fmtDate(to)}`,
+        subtitle: `${clsText(c, o)} · từ ngày ${U.fmtDate(from)} đến ngày ${U.fmtDate(to)}`,
         tests, showComments: o.r_comments, avg: o.r_avg ? avgOf(tests.map((t) => t.score)) : null,
         att: o.r_present || o.r_absent || o.r_rate ? { present, absent, showPresent: o.r_present, showAbsent: o.r_absent, showRate: o.r_rate, rate: present + absent ? Math.round((present / (present + absent)) * 100) : '' } : null,
         tuition: o.r_tuition && tr ? { month, base: tr.base, deduct: tr.deduct, total: tr.total, paid: tr.paid, showBase: o.r_base, showDeduct: o.r_deduct, showTotal: o.r_total, showPaid: o.r_paid } : null,
@@ -184,7 +188,7 @@
       const c = App.classById(s.classId) || {};
       const tests = testsOf(s, assessments, picked, '', '');
       return {
-        center: App.settings.centerName, student: s, courseName: o.p_course || c.name, classCode: c.code,
+        center: App.settings.centerName, student: s, courseName: o.p_course || c.name, classCode: o.ccode ? c.code : '',
         from: o.c_blank || !from ? '' : U.fmtDate(from), to: o.c_blank || !to ? '' : U.fmtDate(to),
         tests, showScores: o.c_scores, avg: o.c_avg ? avgOf(tests.map((t) => t.score)) : '',
         org: o.p_org || App.settings.centerName, signerTitle: o.p_title, signerName: o.p_signer, issueDate: o.p_issue === 'today' ? fmtLong(today) : o.p_issue === 'custom' && o.p_issue_date ? fmtLong(o.p_issue_date) : '',
@@ -193,7 +197,7 @@
     await X.exportCertificates(cards, fname('Giay_chung_nhan', list));
   }
 
-  async function build(listIn, o, month, allStudents, admin) {
+  async function build(listIn, o, per, allStudents, admin) {
     const key = (s) => {
       const c = App.classById(s.classId) || {}, w = s.name.trim().split(/\s+/);
       return String(c.grade || 0).padStart(2, '0') + '|' + (c.code || '') + '|' + w[w.length - 1] + ' ' + s.name;
@@ -201,14 +205,15 @@
     const list = listIn.slice().sort((a, b) => key(a).localeCompare(key(b), 'vi'));
     const classIds = [...new Set(list.map((s) => s.classId))];
     const classes = classIds.map((id) => App.classById(id)).filter(Boolean);
-    const [attendance, assessments, payments] = await Promise.all([DB.q('attendance'), DB.q('assessments'), DB.q('payments', [['month', '==', month]])]);
+    const [attendance, assessments, payments] = await Promise.all([DB.q('attendance'), DB.q('assessments'), o.tuition ? DB.q('payments') : Promise.resolve([])]);
 
     const cols = [], gets = [];
     const add = (c, g) => { cols.push(c); gets.push(g); };
     add({ h: 'STT', w: 6, align: 'center' }, (s, i) => i + 1);
     if (o.code) add({ h: 'Mã HS', w: 22 }, (s) => s.code || '');
     add({ h: 'Họ và tên', w: 28, bold: true }, (s) => s.name);
-    if (o.cls) add({ h: 'Lớp', w: 12, align: 'center' }, (s) => (App.classById(s.classId) || {}).name || '');
+    if (o.cname) add({ h: 'Lớp', w: 12, align: 'center' }, (s) => (App.classById(s.classId) || {}).name || '');
+    if (o.ccode) add({ h: 'Mã lớp', w: 16, align: 'center' }, (s) => (App.classById(s.classId) || {}).code || '');
     if (o.sdate) add({ h: 'Bắt đầu học', w: 14, align: 'center' }, (s) => (s.startDate ? U.fmtDate(s.startDate) : 'Từ đầu khóa'));
     if (o.phone) add({ h: 'Số điện thoại', w: 16, align: 'center' }, (s) => s.phone || '');
     if (o.cccd) add({ h: 'CCCD', w: 18, align: 'center' }, (s) => (admin ? s.cccd || '' : U.maskId(s.cccd || '')));
@@ -217,7 +222,7 @@
 
     // điểm các bài kiểm tra
     let tests = assessments.filter((a) => classIds.includes(a.classId)).sort((a, b) => a.date.localeCompare(b.date));
-    if (o.testScope === 'month') tests = tests.filter((a) => a.date.slice(0, 7) === month);
+    if (o.testScope === 'month') tests = tests.filter((a) => a.date >= per.from && a.date <= per.to);
     const scoreOf = (s, a) => (a.classId === s.classId && a.scores && a.scores[s.id] != null && a.scores[s.id] !== '' ? Number(a.scores[s.id]) : '');
     if (o.scores) {
       tests.forEach((a) => {
@@ -234,13 +239,13 @@
     }
 
     // điểm danh trong tháng
-    const [from, to] = U.monthRange(month);
-    const mdocs = attendance.filter((a) => a.date.slice(0, 7) === month);
+    const { from, to } = per;
+    const mdocs = attendance.filter((a) => a.date >= from && a.date <= to);
     const countOf = (s, v) => mdocs.filter((d) => d.classId === s.classId && d.records && d.records[s.id] === v).length;
     if (o.att) add({ h: 'Số buổi đi học', w: 13, align: 'center', color: () => 'FF0E7A3E', bold: true, sum: true }, (s) => countOf(s, true));
     if (o.absent) add({ h: 'Số buổi vắng', w: 13, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : undefined), bold: true, sum: true }, (s) => countOf(s, false));
     if (o.detail) {
-      const dates = [...new Set(classes.flatMap((c) => U.sessions(c, from, to)))].sort();
+      const dates = [...new Set(classes.flatMap((c) => U.sessions(c, from, to)))].filter((d) => per.kind === 'month' || d <= U.today()).sort();
       dates.forEach((d) => add({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 8, align: 'center', bold: true, color: (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E') }, (s) => {
         const doc = mdocs.find((x) => x.classId === s.classId && x.date === d);
         const v = doc && doc.records && doc.records[s.id];
@@ -250,12 +255,12 @@
 
     // học phí tháng
     if (o.tuition) {
-      const trs = U.tuitionRows({ classes, students: allStudents, attendance, payments, settings: App.settings, month });
+      const trs = U.tuitionPeriod({ classes, students: allStudents, attendance, payments, settings: App.settings, from, to });
       const tr = (s) => trs.find((r) => r.student.id === s.id) || {};
       const money = (key) => (s) => (tr(s)[key] === undefined ? '' : tr(s)[key]);
       if (o.base) add({ h: 'Học phí', w: 15, fmt: MONEY, sum: true }, money('base'));
       if (o.deduct) add({ h: 'Giảm / trừ', w: 15, fmt: MONEY, sum: true, color: (v) => (v > 0 ? 'FFC62828' : undefined) }, money('deduct'));
-      if (o.total) add({ h: `Phải đóng\n${U.monthLabel(month)}`, w: 17, fmt: MONEY, bold: true, sum: true }, money('total'));
+      if (o.total) add({ h: `Phải đóng\n${per.kind === 'month' ? U.monthLabel(per.month) : 'trong kỳ'}`, w: 17, fmt: MONEY, bold: true, sum: true }, money('total'));
       if (o.paid) add({ h: 'Đã đóng?', w: 12, align: 'center', color: (v) => (v === 'Đã đóng' ? 'FF0E7A3E' : 'FFB45309') }, (s) => (tr(s).student ? (tr(s).paid ? 'Đã đóng' : 'Chưa đóng') : ''));
     }
 
@@ -271,13 +276,13 @@
       });
     }
     const single = list.length === 1;
-    const title = single ? 'BÁO CÁO HỌC SINH' : classes.length === 1 ? `BÁO CÁO LỚP ${classes[0].name.toUpperCase()}` : 'BÁO CÁO HỌC SINH';
-    const info = [single ? `Học sinh: ${list[0].name}${(App.classById(list[0].classId) || {}).name ? ' · ' + App.classById(list[0].classId).name : ''}` : `Số học sinh: ${list.length}${classes.length === 1 ? ' · Lớp ' + classes[0].name + ' (' + classes[0].code + ')' : ''}`,
-      `Tháng: ${month.slice(5)}/${month.slice(0, 4)} · Ngày xuất: ${U.fmtDate(U.today())}`];
+    const title = single ? 'BÁO CÁO HỌC SINH' : classes.length === 1 ? `BÁO CÁO ${/^lớp/i.test(classes[0].name) || !o.cname ? '' : 'LỚP '}${clsText(classes[0], o).toUpperCase()}` : 'BÁO CÁO HỌC SINH';
+    const info = [single ? `Học sinh: ${list[0].name}${(App.classById(list[0].classId) || {}).name ? ' · ' + clsText(App.classById(list[0].classId), o) : ''}` : `Số học sinh: ${list.length}${classes.length === 1 ? ' · ' + (/^lớp/i.test(classes[0].name) ? '' : 'Lớp ') + clsText(classes[0], o) : ''}`,
+      `Kỳ báo cáo: ${per.label} · Ngày xuất: ${U.fmtDate(U.today())}`];
     await X.exportTable({
       name: 'Báo cáo học sinh', title, info, cols, rows, total, landscape: cols.length > 7,
       freezeCols: o.code ? 3 : 2, signature: list.length > 1,
-    }, `Bao_cao_${single ? slug(list[0].name) : classes.length === 1 ? slug(classes[0].code) : 'hoc_sinh'}_${month}.xlsx`);
+    }, `Bao_cao_${single ? slug(list[0].name) : classes.length === 1 ? slug(classes[0].code) : 'hoc_sinh'}_${per.file}.xlsx`);
   }
 
   /* ===================== IN PHIẾU HOÀN THÀNH & BẢNG TỔNG HỢP LỚP (in trực tiếp / lưu PDF) ===================== */

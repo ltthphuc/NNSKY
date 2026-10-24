@@ -141,7 +141,7 @@
       : U.deductText(settings);
 
   /* Tính học phí tháng cho các lớp. Học sinh nghỉ chỉ hiện nếu còn dữ liệu điểm danh trong tháng. */
-  U.tuitionRows = ({ classes, students, attendance, payments, settings, month }) => {
+  U.tuitionRows = ({ classes, students, attendance, payments, settings, month, clip }) => {
     const rows = [];
     const [from, to] = U.monthRange(month);
     const today = U.today();
@@ -154,15 +154,18 @@
       for (const st of students.filter((s) => s.classId === cls.id)) {
         const sd = st.startDate || '';
         if (sd && sd > to) continue; // chưa bắt đầu học trong tháng này
-        const mine = sd ? scheduled.filter((d) => d >= sd) : scheduled; // các buổi học sinh có theo học
+        const inClip = (d) => !clip || ((!clip.from || d >= clip.from) && (!clip.to || d <= clip.to));
+        const mine = (sd ? scheduled.filter((d) => d >= sd) : scheduled).filter(inClip); // các buổi học sinh có theo học (trong kỳ)
         const ratio = scheduled.length ? mine.length / scheduled.length : 1;
-        const myDocs = sd ? docs.filter((d) => d.date >= sd) : docs;
+        const myDocs = (sd ? docs.filter((d) => d.date >= sd) : docs).filter((d) => inClip(d.date));
+        if (clip && !mine.length && !myDocs.length) continue; // tháng này không có buổi nào trong kỳ
         const has = myDocs.some((d) => d.records && st.id in d.records);
         if (st.status === 'inactive' && !has) continue;
         let present = 0, absent = 0;
         myDocs.forEach((d) => { const v = d.records && d.records[st.id]; if (v === true) present++; else if (v === false) absent++; });
         const { base, deduct, total: calc } = U.calcFee(cls, settings, present, absent, ratio);
-        const pay = payments.find((p) => p.id === `${st.id}_${month}`);
+        const whole = !clip || ((!clip.from || clip.from <= from) && (!clip.to || clip.to >= to));
+        const pay = whole ? payments.find((p) => p.id === `${st.id}_${month}`) : null;
         rows.push({
           student: st, cls, scheduled: mine.length, classScheduled: scheduled.length, ratio, recorded: docs.length, missing, present, absent,
           base: pay ? pay.base : base, deduct: pay ? pay.deduct : deduct, total: pay ? pay.amount : calc, calc,
@@ -171,6 +174,64 @@
       }
     }
     return rows;
+  };
+
+  /* ---------- Kỳ báo cáo: tháng / học kỳ / khoảng ngày / tất cả buổi đã dạy ---------- */
+  U.schoolYear = (d = U.today()) => { const y = +d.slice(0, 4), m = +d.slice(5, 7); return m >= 8 ? y : y - 1; };
+  U.semesterRange = (sy, k) => (k === 'HK1' ? [`${sy}-09-01`, `${sy + 1}-01-15`] : k === 'HK2' ? [`${sy + 1}-01-20`, `${sy + 1}-05-31`] : [`${sy}-09-01`, `${sy + 1}-05-31`]);
+  const SEM_NAME = { HK1: 'Học kỳ 1', HK2: 'Học kỳ 2', NH: 'Cả năm học' };
+  U.periodHtml = (o = {}) => {
+    const today = U.today(), sy = U.schoolYear(today), mo = +today.slice(5, 7);
+    const kind = o.kind || 'month', sem = o.sem || (mo >= 2 && mo <= 7 ? 'HK2' : 'HK1');
+    const opt = (v, t, cur) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${t}</option>`;
+    return `<div class="period"><label class="f">Kỳ báo cáo</label>
+      <select class="select" data-pk>${opt('month', 'Theo tháng', kind)}${opt('semester', 'Theo học kỳ', kind)}${opt('range', 'Từ ngày … đến ngày …', kind)}${opt('all', 'Tất cả các buổi đã dạy (từ khi mở lớp)', kind)}</select>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap">
+        <input class="input" type="month" data-pm value="${o.month || today.slice(0, 7)}" style="width:auto">
+        <select class="select" data-ps style="width:auto">${Object.keys(SEM_NAME).map((k) => opt(k, SEM_NAME[k], sem)).join('')}</select>
+        <select class="select" data-py style="width:auto">${[sy + 1, sy, sy - 1, sy - 2].map((y) => opt(String(y), `Năm học ${y} - ${y + 1}`, String(sy))).join('')}</select>
+        <label class="small muted" data-pr>Từ ngày <input class="input" type="date" data-pf value="${o.from || today.slice(0, 7) + '-01'}" style="width:auto"></label>
+        <label class="small muted" data-pr>đến ngày <input class="input" type="date" data-pt value="${o.to || today}" style="width:auto"></label>
+      </div></div>`;
+  };
+  U.periodBind = (wrap) => {
+    const sync = () => {
+      const k = wrap.querySelector('[data-pk]').value;
+      wrap.querySelector('[data-pm]').style.display = k === 'month' ? '' : 'none';
+      wrap.querySelector('[data-ps]').style.display = wrap.querySelector('[data-py]').style.display = k === 'semester' ? '' : 'none';
+      wrap.querySelectorAll('[data-pr]').forEach((x) => { x.style.display = k === 'range' ? '' : 'none'; });
+    };
+    wrap.querySelector('[data-pk]').onchange = sync; sync();
+  };
+  /* trả về { kind, from, to, label, file, month? } */
+  U.periodGet = (wrap, classes = []) => {
+    const g = (q) => wrap.querySelector(q), kind = g('[data-pk]').value, today = U.today();
+    if (kind === 'month') { const m = g('[data-pm]').value || today.slice(0, 7); const [from, to] = U.monthRange(m); return { kind, month: m, from, to, label: U.monthLabel(m), file: m }; }
+    if (kind === 'semester') {
+      const sy = +g('[data-py]').value, k = g('[data-ps]').value, [from, to] = U.semesterRange(sy, k);
+      return { kind, from, to, label: `${SEM_NAME[k]} năm học ${sy} - ${sy + 1}`, file: `${k}_${sy}` };
+    }
+    if (kind === 'range') {
+      const from = g('[data-pf]').value, to = g('[data-pt]').value;
+      if (!from || !to || from > to) throw new Error('Khoảng ngày không hợp lệ (ngày bắt đầu phải trước ngày kết thúc).');
+      return { kind, from, to, label: `Từ ngày ${U.fmtDate(from)} đến ngày ${U.fmtDate(to)}`, file: `${from}_${to}` };
+    }
+    const starts = classes.map((c) => c.startDate).filter(Boolean).sort();
+    const from = starts[0] || U.addMonth(today.slice(0, 7), -11) + '-01';
+    return { kind, from, to: today, label: `Tất cả các buổi đã dạy (từ ${U.fmtDate(from)} đến ${U.fmtDate(today)})`, file: 'tat_ca_buoi_da_day' };
+  };
+  /* Học phí cộng dồn nhiều tháng trong kỳ [from, to]: mỗi tháng tính theo các buổi nằm trong kỳ, "đã đóng" khi mọi tháng đều đã đóng */
+  U.tuitionPeriod = ({ classes, students, attendance, payments, settings, from, to }) => {
+    const acc = new Map();
+    for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = U.addMonth(m, 1)) {
+      U.tuitionRows({ classes, students, attendance, payments, settings, month: m, clip: { from, to } }).forEach((r) => {
+        const a = acc.get(r.student.id) || { student: r.student, cls: r.cls, present: 0, absent: 0, base: 0, deduct: 0, total: 0, calc: 0, months: 0, paidMonths: 0, missing: 0, scheduled: 0 };
+        a.present += r.present; a.absent += r.absent; a.base += r.base; a.deduct += r.deduct; a.total += r.total; a.calc += r.calc;
+        a.months++; if (r.paid) a.paidMonths++; a.missing += r.missing; a.scheduled += r.scheduled;
+        acc.set(r.student.id, a);
+      });
+    }
+    return [...acc.values()].map((a) => ({ ...a, paid: a.months > 0 && a.paidMonths === a.months }));
   };
 
   /* ---------- Biểu tượng ---------- */

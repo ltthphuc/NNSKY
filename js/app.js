@@ -32,6 +32,7 @@
     { name: 'staff', label: 'Giáo viên', icon: 'teachers', admin: true },
     { name: 'payroll', label: 'Công & lương GV', icon: 'clock', admin: true },
     { name: 'assign', label: 'Phân công & đơn giá', icon: 'teachers', admin: true },
+    { name: 'reports', label: 'Báo cáo & hồ sơ', icon: 'download', admin: true },
     { name: 'settings', label: 'Cài đặt', icon: 'settings', admin: true },
   ];
   const navLabel = (n) => (!DB.isAdmin() && n.labelT) || n.label;

@@ -408,19 +408,39 @@
   });
 
   /* ===== Học phí ===== */
-  X.exportTuition = safe(async (rows, month, settings) => {
+  X.exportTuition = safe(async (rows, month, settings, opt = {}) => {
     const wb = newBook();
+    const label = opt.label || U.monthLabel(month), showName = opt.showName !== false, showCode = !!opt.showCode;
     const classes = [...new Map(rows.map((r) => [r.cls.id, r.cls])).values()];
+    const cols = [], gets = [], sums = [];
+    const add = (c, g, sum) => { cols.push(c); gets.push(g); sums.push(!!sum); };
+    add({ h: 'STT', w: 6, align: 'center' }, (r, i) => i + 1);
+    add({ h: 'Mã HS', w: 22 }, (r) => r.student.code || '');
+    add({ h: 'Họ và tên', w: 28, bold: true }, (r) => r.student.name);
+    if (showName) add({ h: 'Lớp', w: 12, align: 'center' }, (r) => r.cls.name);
+    if (showCode) add({ h: 'Mã lớp', w: 16, align: 'center' }, (r) => r.cls.code || '');
+    add({ h: 'Số buổi có mặt', w: 11, align: 'center' }, (r) => r.present, true);
+    add({ h: 'Số buổi vắng', w: 11, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : undefined) }, (r) => r.absent, true);
+    add({ h: 'Học phí', w: 15, fmt: MONEY }, (r) => r.base, true);
+    add({ h: 'Giảm', w: 15, fmt: MONEY, color: (v) => (v > 0 ? 'FFC62828' : undefined) }, (r) => r.deduct, true);
+    add({ h: 'Phải đóng', w: 16, fmt: MONEY, bold: true }, (r) => r.total, true);
+    add({ h: 'Trạng thái', w: 12, align: 'center', color: (v) => (v === 'Đã đóng' ? 'FF0E7A3E' : 'FFB45309') }, (r) => (r.paid ? 'Đã đóng' : 'Chưa đóng'));
+    const data = rows.map((r, i) => gets.map((g) => g(r, i)));
+    const clsText = (c) => [showName ? c.name : '', showCode && c.code ? (showName ? `(${c.code})` : c.code) : ''].filter(Boolean).join(' ') || c.name;
     addSheet(wb, {
-      name: 'Học phí ' + month, title: `BẢNG HỌC PHÍ ${U.monthLabel(month).toUpperCase()}`, info: [`Số học sinh: ${rows.length} · Đã đóng: ${rows.filter((r) => r.paid).length}`],
-      cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 22 }, { h: 'Họ và tên', w: 28, bold: true }, { h: 'Lớp', w: 12, align: 'center' }, { h: 'Số buổi có mặt', w: 11, align: 'center' }, { h: 'Số buổi vắng', w: 11, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : undefined) },
-        { h: 'Học phí', w: 15, fmt: MONEY }, { h: 'Giảm', w: 15, fmt: MONEY, color: (v) => (v > 0 ? 'FFC62828' : undefined) }, { h: 'Phải đóng', w: 16, fmt: MONEY, bold: true },
-        { h: 'Trạng thái', w: 12, align: 'center', color: (v) => (v === 'Đã đóng' ? 'FF0E7A3E' : 'FFB45309') }],
-      rows: rows.map((r, i) => [i + 1, r.student.code || '', r.student.name, r.cls.name, r.present, r.absent, r.base, r.deduct, r.total, r.paid ? 'Đã đóng' : 'Chưa đóng']),
-      total: ['', '', 'TỔNG CỘNG', '', rows.reduce((s, r) => s + r.present, 0), rows.reduce((s, r) => s + r.absent, 0), rows.reduce((s, r) => s + r.base, 0), rows.reduce((s, r) => s + r.deduct, 0), rows.reduce((s, r) => s + r.total, 0), ''],
-      notes: classes.map((c) => `${c.name}: ${U.feeRuleText(c, settings)}`), freezeCols: 3, signature: true,
+      name: 'Học phí', title: `BẢNG HỌC PHÍ ${label.toUpperCase()}`, info: [`Số học sinh: ${rows.length} · Đã đóng: ${rows.filter((r) => r.paid).length}`],
+      cols, rows: data,
+      total: cols.map((c, i) => (i === 2 ? 'TỔNG CỘNG' : sums[i] ? data.reduce((p, r) => p + (Number(r[i]) || 0), 0) : '')),
+      notes: classes.map((c) => `${clsText(c)}: ${U.feeRuleText(c, settings)}`), freezeCols: 3, signature: true,
     });
-    await saveBook(wb, `Hoc_phi_${month}.xlsx`);
+    await saveBook(wb, opt.file || `Hoc_phi_${month}.xlsx`);
+  });
+
+  /* Nhiều sheet trong một file: specs là danh sách spec của addSheet */
+  X.exportWorkbook = safe(async (specs, filename) => {
+    const wb = newBook();
+    specs.forEach((sp) => addSheet(wb, sp));
+    await saveBook(wb, filename);
   });
 
   /* ===== Phiếu theo từng học sinh: bảng kết quả học tập (dạng dọc) & giấy chứng nhận ===== */

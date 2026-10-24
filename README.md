@@ -67,3 +67,12 @@ js/views2.js        Điểm danh, Đánh giá, Học phí, Giáo viên, Cài đ�
 js/app.js           đăng nhập, menu, điều hướng
 firestore.rules     quy tắc bảo mật Firestore
 ```
+
+
+## Báo cáo theo kỳ, mã lớp và mục "Báo cáo & hồ sơ"
+- **Xuất báo cáo trong lớp** và **xuất học phí**: chọn kỳ theo tháng, học kỳ (HK1, HK2, cả năm học), khoảng ngày từ…đến… hoặc tất cả các buổi đã dạy; bật/tắt ghi tên lớp và mã lớp.
+- **Quản trị → Báo cáo & hồ sơ**: nhập thông tin pháp lý của trung tâm, chọn lớp rồi
+  - in/tải Word **Quyết định mở lớp** (thể thức Nghị định 30/2020/NĐ-CP; chọn một hoặc nhiều lớp, có thời khóa biểu và giáo viên phân công);
+  - in/tải Word **Báo cáo tình hình hoạt động gửi Sở GD&ĐT** (tự điền số liệu);
+  - tải **bộ hồ sơ Excel phục vụ kiểm tra** (tổng hợp, danh sách học sinh/giáo viên, thời khóa biểu, điểm danh, kết quả học tập, học phí, rà soát dữ liệu thiếu, danh mục hồ sơ cần chuẩn bị).
+- Các văn bản pháp luật trong phần "căn cứ" chỉ là gợi ý, hãy đối chiếu quy định hiện hành của địa phương trước khi ban hành.

@@ -651,6 +651,27 @@
         },
       });
     };
+    const exportDialog = () => {
+      const cl = classes.filter((c) => !st.classId || c.id === st.classId);
+      const m = U.modal({
+        title: 'Xuất học phí ra Excel', okText: 'Tải file Excel',
+        body: `${U.periodHtml({ month: st.month })}
+          <div class="hint">Học sinh vào học giữa kỳ chỉ tính từ ngày bắt đầu học; nhiều tháng thì cộng dồn từng tháng.</div>
+          <label class="f" style="margin-top:12px">Ghi kèm</label>
+          <div class="row"><label class="ck"><input type="checkbox" id="xn" checked> Tên lớp</label><label class="ck"><input type="checkbox" id="xc" checked> Mã lớp</label></div>
+          <div class="small muted" style="margin-top:8px">Phạm vi: ${st.classId ? 'lớp đang chọn' : 'tất cả các lớp'}</div>`,
+        onOk: async (w) => {
+          const per = U.periodGet(w.querySelector('.period'), cl);
+          const pays = await DB.q('payments');
+          const rows = U.tuitionPeriod({ classes: cl, students, attendance, payments: pays, settings: App.settings, from: per.from, to: per.to });
+          if (!rows.length) throw new Error('Không có dữ liệu học phí trong kỳ này.');
+          const vnKey = (r) => { const x = r.student.name.trim().split(/\s+/); return x[x.length - 1] + ' ' + r.student.name; };
+          rows.sort((a, b) => a.cls.grade - b.cls.grade || a.cls.code.localeCompare(b.cls.code) || vnKey(a).localeCompare(vnKey(b), 'vi'));
+          await X.exportTuition(rows, per.month || per.from.slice(0, 7), App.settings, { label: per.label, file: `Hoc_phi_${per.file}.xlsx`, showName: w.querySelector('#xn').checked, showCode: w.querySelector('#xc').checked });
+        },
+      });
+      U.periodBind(m.el.querySelector('.period'));
+    };
     root.onchange = async (e) => {
       if (e.target.id === 'cls') { st.classId = e.target.value; render(); return; }
       if (e.target.id === 'tfile') {
@@ -682,7 +703,7 @@
       if (pr) U.printHTML(receiptHTML([find(pr.dataset.print)], st.month, App.settings));
       if (t.closest('#imp')) { root.querySelector('#tfile').click(); return; }
       if (t.closest('#printall')) U.printHTML(receiptHTML(compute().rows, st.month, App.settings));
-      if (t.closest('#exp')) { try { X.exportTuition(compute().rows, st.month, App.settings); } catch (er) { U.toast(er.message, 'err'); } }
+      if (t.closest('#exp')) exportDialog();
     };
     const reload = async () => { root.querySelector('.card.toolbar') && (root.style.opacity = .6); await load(); root.style.opacity = 1; render(); };
     root.innerHTML = '<div class="loading"><div class="spinner"></div>Đang tính học phí...</div>';

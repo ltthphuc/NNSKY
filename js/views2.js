@@ -665,6 +665,7 @@
 
   /* groups: [{ student, cls, items:[{month, present, absent, base, deduct, total, paid, note}] }]
    * o: { per: 1|2|4|6|8, kind: 'thu'|'bao', printDate, showCode, chibi } */
+  const QR_SRC = new URL('assets/qr_thanh_toan.jpg', document.baseURI).href;
   const receiptsHTML = (groups, o, settings) => {
     const per = o.per || 1, cols = per >= 4 ? 2 : 1, rowsN = per / cols, bao = o.kind === 'bao', chibi = o.chibi !== false;
     const fs = { 1: 17, 2: 14, 4: 11.5, 6: 10.5, 8: 9.5 }[per] || 12;
@@ -679,14 +680,15 @@
       const deco = chibi ? `<i class="dc a" style="width:${sz}px;height:${sz}px">${idx % 2 ? CHIBI.girl : CHIBI.boy}</i><i class="dc b" style="width:${sz}px;height:${sz}px">${idx % 2 ? CHIBI.boy : CHIBI.girl}</i>
         <i class="dc c" style="width:${sz * 0.85}px;height:${sz * 0.85}px">${CHIBI.star}</i><i class="dc d" style="width:${sz * 0.9}px;height:${sz * 0.9}px">${CHIBI.cloud}</i>
         <i class="dc e" style="width:${sz * 0.62}px;height:${sz * 0.62}px">${CHIBI.pencil}</i><i class="dc f" style="width:${sz * 0.62}px;height:${sz * 0.62}px">${CHIBI.book}</i>` : '';
+      const qr = o.qr !== false ? `<div class="qr"><img src="${QR_SRC}" alt=""><div class="qc">Quý PH có thể đóng HP qua tài khoản trên hoặc đóng trực tiếp</div></div>` : '';
       return `<div class="rc">${deco}<div class="in">
         <div class="band"><div class="cn">${esc(settings.centerName)}</div><h3>${title}</h3></div>
-        ${bao ? `<div class="hi">Kính gửi Quý phụ huynh của em <b>${nm}</b>,<br>Trung tâm xin thông báo học phí như sau:</div>` : ''}
-        <div class="who">${bao ? '' : `Học sinh: <b>${nm}</b> · `}Lớp: <b>${cn}</b>${!g.blank && o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>
-        <table class="m"><thead><tr><th>Tháng</th><th>Phải đóng</th><th>Tình trạng</th></tr></thead><tbody>
+        ${bao ? `<div class="hi">Kính gửi Quý phụ huynh${g.blank ? '' : ' của em <b>' + nm + '</b>'},<br>Trung tâm xin thông báo học phí như sau:</div>` : ''}
+        ${g.blank ? '' : `<div class="who">${bao ? '' : `Học sinh: <b>${nm}</b> · `}Lớp: <b>${cn}</b>${o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>`}
+        <div class="body"><div class="main"><table class="m"><thead><tr><th>Tháng</th><th>Phải đóng</th><th>Tình trạng</th></tr></thead><tbody>
         ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}${r.cut ? ` <small>(tính đến ${U.fmtDate(r.cut).slice(0, 5)})</small>` : ''}</td><td class="r"><b>${money(r.total)}</b></td><td class="c"><span class="${r.paid ? 'ok' : 'no'}">${r.paid ? 'Đã đóng' : 'Chưa đóng'}</span></td></tr>`).join('')}</tbody></table>
         <div class="tot"><span>${multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG'}</span><b>${money(tot)}</b></div>${multi && owe !== tot ? `<div class="tot owe"><span>CÒN PHẢI ĐÓNG</span><b>${money(owe)}</b></div>` : ''}
-        <p class="sm">${esc(U.feeRuleText(g.cls, settings))}${notes.length ? '<br>' + notes.map(esc).join('<br>') : ''}</p>
+        </div>${qr}</div>
         ${bao ? `<div class="thx">Trân trọng cảm ơn Quý phụ huynh!</div><div class="sg one"><div>Trung tâm<br><i>(ký, đóng dấu)</i></div></div>`
           : `<div class="sg"><div>Phụ huynh<br><i>(ký, ghi rõ họ tên)</i></div><div>Người thu tiền<br><i>(ký, ghi rõ họ tên)</i></div></div>`}
         ${o.printDate ? `<div class="pd">Ngày in: ${U.fmtDate(U.today())}</div>` : ''}</div></div>`;
@@ -707,10 +709,15 @@
       .hi{margin:2px 0 4px;font-size:${fs}px;line-height:1.35}.who{margin:${per === 1 ? '4px 0 10px' : '2px 0 5px'};text-align:center}
       table.m{width:100%;border-collapse:separate;border-spacing:0;border-radius:8px;overflow:hidden;border:1px solid #cfe3f7}
       .m th{background:#dff0ff;color:#1b4f86;font-size:${fs - 1}px;padding:${per === 1 ? '7px 5px' : '2px 3px'}}
-      .m td{padding:${per === 1 ? '7px 5px' : '2px 3px'};border-top:1px solid #e4effa;text-align:left}.m tr:nth-child(even) td{background:#f7fbff}
-      .m .c{text-align:center}.m .r{text-align:right;white-space:nowrap}
+      .m th,.m td{text-align:center;vertical-align:middle}
+      .m td{padding:${per === 1 ? '7px 5px' : '2px 3px'};border-top:1px solid #e4effa}.m tr:nth-child(even) td{background:#f7fbff}
+      .m .c,.m .r{text-align:center;white-space:nowrap}
+      .body{display:flex;flex-direction:${per >= 4 ? 'row' : 'column'};gap:${per >= 4 ? 6 : 10}px;align-items:${per >= 4 ? 'center' : 'stretch'};margin-top:${per === 1 ? 6 : 0}px}
+      .main{flex:1;min-width:0}.qr{text-align:center;${per >= 4 ? 'width:' + ({ 4: 130, 6: 116, 8: 108 }[per] || 100) + 'px;flex:none' : ''}}
+      .qr img{display:block;margin:0 auto;border-radius:6px;width:${per >= 4 ? '100%' : per === 1 ? '250px' : '160px'}}
+      .qc{font-size:${fs - 1.5}px;font-weight:600;color:#1b4f86;margin-top:2px;line-height:1.25}
       .ok{color:#0e7a3e;font-weight:700}.no{color:#d9730d;font-weight:700}
-      .tot{display:flex;justify-content:space-between;align-items:center;margin-top:${per === 1 ? 10 : 4}px;padding:${per === 1 ? '9px 14px' : '3px 8px'};border-radius:10px;background:linear-gradient(90deg,#ffe58a,#ffc2de);color:#7a2250;font-size:${fs + 1}px}
+      .tot{display:flex;justify-content:center;gap:14px;align-items:center;margin-top:${per === 1 ? 10 : 4}px;padding:${per === 1 ? '9px 14px' : '3px 8px'};border-radius:10px;background:linear-gradient(90deg,#ffe58a,#ffc2de);color:#7a2250;font-size:${fs + 1}px}
       .tot b{font-size:${fs + 3}px}.tot.owe{background:linear-gradient(90deg,#ffd9b0,#ffb3b3);color:#8a1f11;margin-top:3px}
       .sm{font-size:${fs - 1.5}px;color:#5b6b85;margin:${per === 1 ? '10px 0' : '3px 0'}}
       .thx{text-align:center;color:#c2185b;font-weight:600;margin-top:2px}
@@ -845,7 +852,7 @@
           <div class="form-grid" style="margin-top:12px">
             <div><label class="f">Tiêu đề phiếu</label><select class="select" id="pkind"><option value="thu">Phiếu thu học phí (thu tại trung tâm)</option><option value="bao">Phiếu báo học phí (gửi về nhà cho phụ huynh)</option></select>
               <label class="f" style="margin-top:10px">Số phiếu trên một tờ A4</label><select class="select" id="pper"><option value="1">1 phiếu (khổ lớn)</option><option value="2">2 phiếu (trên - dưới)</option><option value="4" selected>4 phiếu (2 hàng x 2 cột)</option><option value="6">6 phiếu (3 hàng x 2 cột)</option><option value="8">8 phiếu (4 hàng x 2 cột)</option></select></div>
-            <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="punpaid"> Chỉ in các tháng chưa đóng</label><label class="ck"><input type="checkbox" id="pcode" checked> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="pchibi" checked> Hình chibi trang trí</label><label class="ck"><input type="checkbox" id="pdate"> Ghi ngày in trên phiếu</label></div>
+            <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="punpaid"> Chỉ in các tháng chưa đóng</label><label class="ck"><input type="checkbox" id="pcode" checked> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="pchibi" checked> Hình chibi trang trí</label><label class="ck"><input type="checkbox" id="pqr" checked> In mã QR chuyển khoản</label><label class="ck"><input type="checkbox" id="pdate"> Ghi ngày in trên phiếu</label></div>
           </div>
           <div class="small muted" style="margin-top:8px">Phạm vi: ${st.classId ? 'lớp đang chọn' : 'tất cả các lớp'}. Khi in nhiều tháng cùng lúc, nên chọn 1 - 4 phiếu mỗi tờ để đủ chỗ.</div>`,
         onOk: async (w) => {
@@ -863,7 +870,7 @@
           const vnKey = (g) => { const x = g.student.name.trim().split(/\s+/); return x[x.length - 1] + ' ' + g.student.name; };
           const groups = [...byS.values()].sort((a, b) => a.cls.grade - b.cls.grade || a.cls.code.localeCompare(b.cls.code) || vnKey(a).localeCompare(vnKey(b), 'vi'));
           if (!groups.length) throw new Error(onlyUnpaid ? 'Không có học sinh nào chưa đóng trong các tháng đã chọn.' : 'Không có dữ liệu học phí để in.');
-          U.printHTML(receiptsHTML(groups, { per: Number(w.querySelector('#pper').value), kind: w.querySelector('#pkind').value, chibi: w.querySelector('#pchibi').checked, printDate: w.querySelector('#pdate').checked, showCode: w.querySelector('#pcode').checked }, App.settings));
+          U.printHTML(receiptsHTML(groups, { per: Number(w.querySelector('#pper').value), kind: w.querySelector('#pkind').value, chibi: w.querySelector('#pchibi').checked, qr: w.querySelector('#pqr').checked, printDate: w.querySelector('#pdate').checked, showCode: w.querySelector('#pcode').checked }, App.settings));
         },
       });
       m.el.addEventListener('click', async (e) => {
@@ -916,14 +923,14 @@
           <div class="full"><label class="ck"><input type="checkbox" id="gcommon" checked> <span><b>1 phiếu chung 400.000 đ</b> không ghi tên, để photo gửi cho tất cả học sinh nhóm 1 (đóng đủ)</span></label></div>
           <div class="full"><label class="ck"><input type="checkbox" id="gown" checked> <span><b>Phiếu riêng</b> cho từng học sinh nhóm 2 (số tiền khác 400.000 đ): ghi tên, số buổi đi học và số tiền phải đóng</span></label></div>
           <div><label class="f">Tiêu đề phiếu</label><select class="select" id="gkind"><option value="thu">Phiếu thu học phí</option><option value="bao">Phiếu báo học phí (gửi về nhà)</option></select></div>
-          <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="gchibi" checked> Hình chibi trang trí</label><label class="ck"><input type="checkbox" id="gcode"> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="gdate"> Ghi ngày in trên phiếu</label></div>
+          <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="gchibi" checked> Hình chibi trang trí</label><label class="ck"><input type="checkbox" id="gqr" checked> In mã QR chuyển khoản</label><label class="ck"><input type="checkbox" id="gcode"> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="gdate"> Ghi ngày in trên phiếu</label></div>
         </div>
         <div class="row mt"><button type="button" class="btn ghost" id="glist">${icon('printer')} In danh sách kiểm tra</button><button type="button" class="btn ghost" id="gxls">${icon('download')} Xuất Excel danh sách kiểm tra</button></div>
         <div class="hint">Học sinh đã đóng đủ các tháng đến tháng đã chọn không có trong 2 nhóm. Phạm vi: ${st.classId ? 'lớp đang chọn' : 'tất cả các lớp'}.</div>`,
         onOk: async (w) => {
           if (!G) throw new Error('Chưa tính xong, vui lòng chờ một chút.');
           const month = w.querySelector('#gmonth').value;
-          const o = { per: Number(w.querySelector('#gper').value), kind: w.querySelector('#gkind').value, chibi: w.querySelector('#gchibi').checked, printDate: w.querySelector('#gdate').checked, showCode: w.querySelector('#gcode').checked };
+          const o = { per: Number(w.querySelector('#gper').value), kind: w.querySelector('#gkind').value, chibi: w.querySelector('#gchibi').checked, qr: w.querySelector('#gqr').checked, printDate: w.querySelector('#gdate').checked, showCode: w.querySelector('#gcode').checked };
           const out = [];
           if (w.querySelector('#gcommon').checked) {
             const base = { ...(cl.find((c) => U.sessions(c, ...U.monthRange(month)).length) || cl[0]), name: '', code: '', fee: 400000 };

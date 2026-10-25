@@ -349,6 +349,8 @@
     f.contentDocument.open();
     f.contentDocument.write(html);
     f.contentDocument.close();
-    setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300);
+    // chờ ảnh (mã QR...) tải xong rồi mới in
+    const imgs = [...f.contentDocument.images].filter((i) => !i.complete).map((i) => new Promise((r) => { i.onload = i.onerror = r; }));
+    Promise.all([...imgs, new Promise((r) => setTimeout(r, 300))]).then(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); });
   };
 })();

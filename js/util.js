@@ -98,6 +98,8 @@
       for (const d of docs) {
         for (const [tid, rec] of Object.entries(d.records || {})) {
           const t = teachers.find((x) => x.id === tid) || { id: tid, name: '(đã xóa)' };
+          // chưa đến ngày giáo viên bắt đầu dạy: không tính nghỉ
+          if (d.date < U.teachFrom(cls, tid, teachers) && !(rec && rec.present)) continue;
           const role = U.roleOf(cls, tid);
           const rate = Number(role === 'main' ? t.rateMain : t.rateAssistant) || 0;
           const r = (byT[tid] = byT[tid] || newRow(t));

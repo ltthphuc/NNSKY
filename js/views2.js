@@ -1120,7 +1120,59 @@
           ${lines.map(({ r, l }) => `<tr><td class="name">${esc(r.teacher.name)}</td><td><span class="badge blue">${esc(l.cls.name)}</span></td><td>${U.roleName(l.role)}</td><td class="center">${l.sessions}</td><td class="center">${l.absent}</td><td class="center">${l.planned}</td><td class="center">${l.off ? `<b style="color:var(--err)">${l.off}</b>` : 0}</td><td class="center">${l.periods}</td><td class="right mono">${money(l.rate)}</td><td class="right mono">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
     };
 
-    /* Bảng điểm danh của một giáo viên theo kỳ (tháng / học kỳ / khoảng ngày / tất cả): lớp đã dạy, tiết nghỉ, tiền theo số tiết đã dạy */
+    /* ----- Bảng điểm danh / bảng lương của giáo viên theo kỳ -----
+     * Các buổi trước ngày giáo viên bắt đầu dạy (bắt đầu làm việc, được phân công, khai giảng lớp) không tính nghỉ, chỉ tính từ khi bắt đầu dạy. */
+    const calcTeacher = (tid, per) => {
+      const teacher = App.teachers.find((x) => x.id === tid);
+      const own = App.classes.filter((c) => U.classTeachers(c).includes(tid) || tAtt.some((d) => d.classId === c.id && d.records && d.records[tid]));
+      const hi = per.to < U.today() ? per.to : U.today();
+      const rate = (c) => Number(U.roleOf(c, tid) === 'main' ? teacher.rateMain : teacher.rateAssistant) || 0;
+      const data = own.map((c) => {
+        const tf = U.teachFrom(c, tid) || '';
+        const cells = {}, shown = [];
+        let sess = 0, absent = 0, planned = 0, taught = 0, off = 0;
+        U.sessions(c, per.from, hi).forEach((d) => {
+          const doc = tAtt.find((x) => x.classId === c.id && x.date === d), rec = doc && doc.records && doc.records[tid];
+          if (d < tf && !(rec && rec.present)) return; // chưa bắt đầu dạy: không hiển thị, không tính vắng
+          shown.push(d);
+          if (!rec) { cells[d] = { s: '·', t: 0, o: 0 }; return; }
+          const pl = rec.planned != null ? Number(rec.planned) : Number(U.slotFor(c, d).periods) || Number(c.periods) || 0;
+          const t = rec.present ? Number(rec.periods) || 0 : 0, o = Math.max(0, pl - t);
+          if (rec.present) sess++; else absent++;
+          planned += pl; taught += t; off += o;
+          cells[d] = { s: !rec.present ? 'V' : o > 0 ? `${t}/${pl}` : String(t), t, o };
+        });
+        return { c, dates: shown, cells, sess, absent, planned, taught, off, amount: taught * rate(c), rate: rate(c) };
+      }).filter((x) => x.dates.length);
+      const sum = (f) => data.reduce((a, x) => a + f(x), 0);
+      return { teacher, data, tot: { sess: sum((x) => x.sess), absent: sum((x) => x.absent), planned: sum((x) => x.planned), taught: sum((x) => x.taught), off: sum((x) => x.off), amount: sum((x) => x.amount) } };
+    };
+    const matrixOf = (cd) => {
+      const all = [...new Set(cd.data.flatMap((x) => x.dates))].sort();
+      const byMonth = all.length > 45;
+      const months = [...new Set(all.map((d) => d.slice(0, 7)))];
+      const heads = byMonth ? months.map((mo) => U.monthLabel(mo).replace('Tháng ', 'T')) : all.map((d) => `${U.dayShort(U.parse(d).getDay())} ${U.shortDate(d)}`);
+      const cellOf = (x, i) => {
+        if (!byMonth) { const c = x.cells[all[i]]; return c ? c.s : ''; }
+        const ds = x.dates.filter((d) => d.slice(0, 7) === months[i]);
+        if (!ds.length) return '';
+        const t = ds.reduce((a, d) => a + x.cells[d].t, 0), o = ds.reduce((a, d) => a + x.cells[d].o, 0);
+        return `${t}${o ? ' (nghỉ ' + o + ')' : ''}`;
+      };
+      return { all, byMonth, heads, cellOf };
+    };
+    const matrixSpec = (cd, per, lab) => {
+      const mx = matrixOf(cd), t = cd.teacher;
+      return {
+        name: t.name, title: `BẢNG CHẤM CÔNG VÀ LƯƠNG GIÁO VIÊN ${t.name.toUpperCase()}`, landscape: true,
+        info: [per.label, `Đơn giá: ${money(t.rateMain)}/tiết khi dạy chính, ${money(t.rateAssistant)}/tiết khi trợ giảng · Thành tiền = số tiết đã dạy × đơn giá`],
+        cols: [{ h: 'Lớp', w: 22, bold: true }, { h: 'Vai trò', w: 16 }, ...mx.heads.map((h) => ({ h, w: mx.byMonth ? 14 : 11, align: 'center' })), { h: 'Buổi dạy', w: 10, align: 'center' }, { h: 'Nghỉ cả buổi', w: 11, align: 'center' }, { h: 'Tiết dạy', w: 10, align: 'center', bold: true }, { h: 'Tiết nghỉ', w: 10, align: 'center' }, { h: 'Thành tiền', w: 16, fmt: '#,##0" đ"', bold: true }],
+        rows: cd.data.map((x) => [lab(x.c), U.roleName(U.roleOf(x.c, t.id)), ...mx.heads.map((_, i) => mx.cellOf(x, i)), x.sess, x.absent, x.taught, x.off, x.amount]),
+        total: ['TỔNG CỘNG', '', ...mx.heads.map(() => ''), cd.tot.sess, cd.tot.absent, cd.tot.taught, cd.tot.off, cd.tot.amount], freezeCols: 2, signature: true,
+        notes: ['Số = số tiết đã dạy, V = nghỉ cả buổi, a/b = dạy a trên b tiết, · = chưa điểm danh.' + (mx.byMonth ? ' Kỳ dài nên gom theo tháng.' : ''), 'Các buổi trước ngày giáo viên bắt đầu dạy không tính là nghỉ.'],
+      };
+    };
+
     const reportDialog = (tid) => {
       const teacher = App.teachers.find((x) => x.id === tid);
       if (!teacher) return;
@@ -1135,51 +1187,71 @@
       const q = (s) => m.el.querySelector(s);
       q('#rview').onclick = () => {
         try {
-          const per = U.periodGet(q('.period'), own), hi = per.to < U.today() ? per.to : U.today();
-          const rate = (c) => Number(U.roleOf(c, tid) === 'main' ? teacher.rateMain : teacher.rateAssistant) || 0;
-          const data = own.map((c) => {
-            const from = [per.from, U.teachFrom(c, tid) || ''].sort().pop();
-            const dates = U.sessions(c, from, hi);
-            const cells = {};
-            let sess = 0, taught = 0, off = 0;
-            dates.forEach((d) => {
-              const doc = tAtt.find((x) => x.classId === c.id && x.date === d), rec = doc && doc.records && doc.records[tid];
-              if (!rec) { cells[d] = { s: '·', t: 0, o: 0 }; return; }
-              const planned = rec.planned != null ? Number(rec.planned) : Number(U.slotFor(c, d).periods) || Number(c.periods) || 0;
-              const t = rec.present ? Number(rec.periods) || 0 : 0, o = Math.max(0, planned - t);
-              if (rec.present) sess++;
-              taught += t; off += o;
-              cells[d] = { s: !rec.present ? 'V' : o > 0 ? `${t}/${planned}` : String(t), t, o };
-            });
-            return { c, dates, cells, sess, taught, off, amount: taught * rate(c), rate: rate(c) };
-          }).filter((x) => x.dates.length);
-          if (!data.length) { q('#rout').innerHTML = '<div class="muted">Không có buổi dạy nào trong kỳ này.</div>'; cur = null; return; }
-          const all = [...new Set(data.flatMap((x) => x.dates))].sort();
-          const byMonth = all.length > 45;
-          const months = [...new Set(all.map((d) => d.slice(0, 7)))];
-          const heads = byMonth ? months.map((mo) => U.monthLabel(mo).replace('Tháng ', 'T')) : all.map((d) => `${U.dayShort(U.parse(d).getDay())} ${U.shortDate(d)}`);
-          const cellOf = (x, i) => {
-            if (!byMonth) { const c = x.cells[all[i]]; return c ? c.s : ''; }
-            const ds = x.dates.filter((d) => d.slice(0, 7) === months[i]);
-            if (!ds.length) return '';
-            const t = ds.reduce((a, d) => a + x.cells[d].t, 0), o = ds.reduce((a, d) => a + x.cells[d].o, 0);
-            return `${t}${o ? ' (nghỉ ' + o + ')' : ''}`;
-          };
-          const tot = { sess: data.reduce((a, x) => a + x.sess, 0), taught: data.reduce((a, x) => a + x.taught, 0), off: data.reduce((a, x) => a + x.off, 0), amount: data.reduce((a, x) => a + x.amount, 0) };
+          const per = U.periodGet(q('.period'), own), cd = calcTeacher(tid, per);
+          if (!cd.data.length) { q('#rout').innerHTML = '<div class="muted">Không có buổi dạy nào trong kỳ này (tính từ ngày giáo viên bắt đầu dạy).</div>'; cur = null; return; }
+          const mx = matrixOf(cd);
           const colorOf = (s) => (s === 'V' ? 'var(--err)' : /\//.test(s) || /nghỉ/.test(s) ? 'var(--warn)' : s === '·' ? 'var(--muted)' : 'var(--ok)');
-          q('#rout').innerHTML = `<div class="alert ok" style="margin-bottom:10px"><b>${esc(per.label)}</b> · ${tot.sess} buổi dạy · ${tot.taught} tiết đã dạy · ${tot.off} tiết nghỉ · Thành tiền (theo số tiết đã dạy): <b>${money(tot.amount)}</b></div>
-            <div class="table-wrap"><table class="t grid-mx"><thead><tr><th>Lớp</th>${heads.map((h) => `<th>${esc(h)}</th>`).join('')}<th>Buổi dạy</th><th>Tiết dạy</th><th>Tiết nghỉ</th><th class="right">Thành tiền</th></tr></thead><tbody>
-            ${data.map((x) => `<tr><td class="name">${esc(x.c.name)}<div class="small muted">${U.roleName(U.roleOf(x.c, tid))}</div></td>${heads.map((_, i) => { const s = cellOf(x, i); return `<td style="color:${colorOf(s)};font-weight:600">${esc(s)}</td>`; }).join('')}<td>${x.sess}</td><td><b>${x.taught}</b></td><td>${x.off || 0}</td><td class="right mono"><b>${money(x.amount)}</b></td></tr>`).join('')}
-            </tbody></table></div><div class="hint">Số = số tiết đã dạy, V = nghỉ cả buổi, a/b = dạy a trên b tiết, · = chưa điểm danh.${byMonth ? ' Kỳ dài nên gom theo tháng.' : ''}</div>`;
-          cur = {
-            per,
-            spec: { name: 'Điểm danh giáo viên', title: `BẢNG ĐIỂM DANH GIÁO VIÊN ${teacher.name.toUpperCase()}`, info: [per.label, `Thành tiền theo số tiết đã dạy: ${money(tot.amount)}`], landscape: true,
-              cols: [{ h: 'Lớp', w: 22, bold: true }, { h: 'Vai trò', w: 16 }, ...heads.map((h) => ({ h, w: byMonth ? 14 : 8, align: 'center' })), { h: 'Buổi dạy', w: 10, align: 'center' }, { h: 'Tiết dạy', w: 10, align: 'center', bold: true }, { h: 'Tiết nghỉ', w: 10, align: 'center' }, { h: 'Thành tiền', w: 16, fmt: '#,##0" đ"', bold: true }],
-              rows: data.map((x) => [x.c.name, U.roleName(U.roleOf(x.c, tid)), ...heads.map((_, i) => cellOf(x, i)), x.sess, x.taught, x.off, x.amount]),
-              total: ['TỔNG CỘNG', '', ...heads.map(() => ''), tot.sess, tot.taught, tot.off, tot.amount], freezeCols: 2, signature: true },
-          };
+          q('#rout').innerHTML = `<div class="alert ok" style="margin-bottom:10px"><b>${esc(per.label)}</b> · ${cd.tot.sess} buổi dạy · ${cd.tot.taught} tiết đã dạy · ${cd.tot.off} tiết nghỉ · Thành tiền (theo số tiết đã dạy): <b>${money(cd.tot.amount)}</b></div>
+            <div class="table-wrap"><table class="t grid-mx"><thead><tr><th>Lớp</th>${mx.heads.map((h) => `<th>${esc(h)}</th>`).join('')}<th>Buổi dạy</th><th>Tiết dạy</th><th>Tiết nghỉ</th><th class="right">Thành tiền</th></tr></thead><tbody>
+            ${cd.data.map((x) => `<tr><td class="name">${esc(x.c.name)}<div class="small muted">${U.roleName(U.roleOf(x.c, tid))}</div></td>${mx.heads.map((_, i) => { const s = mx.cellOf(x, i); return `<td style="color:${colorOf(s)};font-weight:600">${esc(s)}</td>`; }).join('')}<td>${x.sess}</td><td><b>${x.taught}</b></td><td>${x.off || 0}</td><td class="right mono"><b>${money(x.amount)}</b></td></tr>`).join('')}
+            </tbody></table></div><div class="hint">Số = số tiết đã dạy, V = nghỉ cả buổi, a/b = dạy a trên b tiết, · = chưa điểm danh. Chỉ tính từ ngày giáo viên bắt đầu dạy.${mx.byMonth ? ' Kỳ dài nên gom theo tháng.' : ''}</div>`;
+          cur = { per, spec: matrixSpec(cd, per, (c) => c.name) };
         } catch (er) { U.toast(er.message, 'err'); }
       };
+    };
+
+    /* Xuất bảng tổng + bảng lương từng giáo viên đã chọn */
+    const exportDialog = () => {
+      const list = App.teachers.filter((t) => admin || t.id === App.me.uid);
+      if (!list.length) { U.toast('Chưa có giáo viên nào.', 'err'); return; }
+      const m = U.modal({
+        title: 'Xuất bảng chấm công và bảng lương', wide: true, okText: 'Tải file Excel',
+        body: `<div class="form-grid"><div class="full">${U.periodHtml({ month: st.month })}</div>
+          <div class="full"><label class="f">Chọn giáo viên</label><div class="row" style="gap:8px;margin-bottom:6px"><button type="button" class="btn sm soft" data-tall>Chọn tất cả</button><button type="button" class="btn sm ghost" data-tnone>Bỏ chọn</button></div>
+            <div class="rp-tests">${list.map((t) => `<label class="ck"><input type="checkbox" data-t="${t.id}" checked> ${esc(t.name)}</label>`).join('')}</div></div>
+          <div class="full"><label class="f">Nội dung xuất</label><label class="ck"><input type="checkbox" id="xsum" checked> Bảng tổng (tất cả giáo viên đã chọn)</label>
+            <label class="ck"><input type="checkbox" id="xeach" checked> Bảng chấm công và lương của từng giáo viên đã chọn (mỗi giáo viên một sheet)</label></div>
+          <div class="full"><label class="f">Ghi kèm</label><div class="row"><label class="ck"><input type="checkbox" id="xn" checked> Tên lớp</label><label class="ck"><input type="checkbox" id="xc"> Mã lớp</label></div>
+            <div class="hint">Chỉ tính từ ngày giáo viên bắt đầu dạy: các buổi trước đó không hiện và không tính nghỉ. Tiền chỉ tính theo số tiết đã dạy.</div></div></div>`,
+        onOk: async (w) => {
+          const per = U.periodGet(w.querySelector('.period'), App.classes);
+          const ids = [...w.querySelectorAll('[data-t]:checked')].map((x) => x.dataset.t);
+          if (!ids.length) throw new Error('Hãy chọn ít nhất một giáo viên.');
+          const wantSum = w.querySelector('#xsum').checked, wantEach = w.querySelector('#xeach').checked;
+          if (!wantSum && !wantEach) throw new Error('Hãy chọn nội dung cần xuất.');
+          const showN = w.querySelector('#xn').checked, showC = w.querySelector('#xc').checked;
+          const lab = (c) => [showN ? c.name : '', showC && c.code ? (showN ? `(${c.code})` : c.code) : ''].filter(Boolean).join(' ') || c.name;
+          const calcs = ids.map((id) => calcTeacher(id, per));
+          const specs = [];
+          if (wantSum) {
+            const rows = calcs.map((cd, i) => [i + 1, cd.teacher.name, cd.data.length, cd.tot.sess, cd.tot.absent, cd.tot.planned, cd.tot.off, cd.tot.taught, cd.tot.amount]);
+            const sm = (i) => rows.reduce((a, r) => a + (r[i] || 0), 0);
+            specs.push({
+              name: 'Bảng tổng', title: 'BẢNG TỔNG CHẤM CÔNG VÀ LƯƠNG GIÁO VIÊN', info: [per.label, 'Thành tiền = số tiết đã dạy × đơn giá mỗi tiết. Chỉ tính từ ngày giáo viên bắt đầu dạy.'],
+              cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Giáo viên', w: 28, bold: true }, { h: 'Số lớp', w: 9, align: 'center' }, { h: 'Số buổi dạy', w: 11, align: 'center' }, { h: 'Nghỉ cả buổi', w: 11, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : undefined) },
+                { h: 'Tiết theo lịch', w: 12, align: 'center' }, { h: 'Tiết nghỉ', w: 10, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : undefined) }, { h: 'Tiết đã dạy', w: 11, align: 'center', bold: true }, { h: 'Thành tiền', w: 16, fmt: '#,##0" đ"', bold: true }],
+              rows, total: ['', 'TỔNG CỘNG', '', sm(3), sm(4), sm(5), sm(6), sm(7), sm(8)], freezeCols: 2, signature: true,
+            });
+          }
+          if (wantEach) {
+            const used = new Set(specs.map((s) => s.name.toLowerCase()));
+            calcs.filter((cd) => cd.data.length).forEach((cd) => {
+              const sp = matrixSpec(cd, per, lab);
+              let nm = cd.teacher.name.replace(/[\\/*?:[\]]/g, ' ').slice(0, 28), k = 2;
+              while (used.has(nm.toLowerCase())) nm = nm.slice(0, 25) + ' ' + k++;
+              used.add(nm.toLowerCase()); sp.name = nm;
+              specs.push(sp);
+            });
+          }
+          if (!specs.length) throw new Error('Không có dữ liệu để xuất trong kỳ này.');
+          await X.exportWorkbook(specs, `Cham_cong_luong_giao_vien_${per.file}.xlsx`);
+        },
+      });
+      U.periodBind(m.el.querySelector('.period'), App.classes);
+      m.el.addEventListener('click', (e) => {
+        if (e.target.closest('[data-tall]')) m.el.querySelectorAll('[data-t]').forEach((x) => { x.checked = true; });
+        if (e.target.closest('[data-tnone]')) m.el.querySelectorAll('[data-t]').forEach((x) => { x.checked = false; });
+      });
     };
     const gridData = () => {
       const [from, to] = U.monthRange(st.month);
@@ -1234,7 +1306,7 @@
       if (t.closest('#impg')) { root.querySelector('#gfile').click(); return; }
       if (t.closest('[data-mprev]')) { st.month = U.addMonth(st.month, -1); await load(); return render(); }
       if (t.closest('[data-mnext]')) { st.month = U.addMonth(st.month, 1); await load(); return render(); }
-      if (t.closest('#exp')) { try { X.exportPayroll(compute(), st.month); } catch (er) { U.toast(er.message, 'err'); } return; }
+      if (t.closest('#exp')) { exportDialog(); return; }
       if (t.closest('[data-view]')) { reportDialog(t.closest('[data-view]').dataset.view); return; }
       const pay = t.closest('[data-pay]'), un = t.closest('[data-unpay]');
       if (pay) {

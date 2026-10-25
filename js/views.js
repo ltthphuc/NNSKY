@@ -96,9 +96,10 @@ window.Views = window.Views || {};
       </tr>`;
     };
     root.innerHTML = `${head('Lớp học', admin ? 'Tạo lớp theo học kỳ hoặc năm học, mỗi lớp có mã riêng.' : 'Các lớp bạn được phân công.', `<button class="btn ghost" id="batch">${icon('printer')} In phiếu hoàn thành hàng loạt</button>${admin ? `<button class="btn" id="add">${icon('plus')} Tạo lớp mới</button>` : ''}`)}
-      <div class="card"><div class="table-wrap">${App.classes.length ? `<table class="t"><thead><tr>
+      <div class="card toolbar">${App.classFilterBar()}<span class="muted grow">${App.shown().length}/${App.classes.length} lớp</span></div>
+      <div class="card"><div class="table-wrap">${App.shown().length ? `<table class="t"><thead><tr>
         <th>Mã lớp</th><th>Tên lớp</th><th>Lịch học</th><th>Học kỳ</th><th>Giáo viên</th><th class="center">Tiết/buổi</th><th class="right">Học phí/tháng</th><th class="center">Sĩ số</th><th>Trạng thái</th><th></th>
-      </tr></thead><tbody>${App.classes.slice().sort((a, b) => a.grade - b.grade || a.code.localeCompare(b.code)).map(rowHtml).join('')}</tbody></table>` : empty('classes', 'Chưa có lớp nào', admin ? 'Bấm "Tạo lớp mới" để bắt đầu.' : 'Quản trị viên chưa phân công lớp cho bạn.')}</div></div>`;
+      </tr></thead><tbody>${App.shown().slice().sort((a, b) => a.grade - b.grade || a.code.localeCompare(b.code)).map(rowHtml).join('')}</tbody></table>` : empty('classes', App.classes.length ? 'Không có lớp nào theo bộ lọc' : 'Chưa có lớp nào', App.classes.length ? 'Hãy đổi bộ lọc lớp ở phía trên.' : admin ? 'Bấm "Tạo lớp mới" để bắt đầu.' : 'Quản trị viên chưa phân công lớp cho bạn.')}</div></div>`;
 
     if (admin) {
       root.querySelector('#add').onclick = () => classModal(null);
@@ -127,8 +128,8 @@ window.Views = window.Views || {};
 
   /* In hàng loạt phiếu hoàn thành (song ngữ): chọn nhiều lớp, in phiếu của mọi học sinh trong từng lớp (lớp nào xếp liền lớp đó) */
   async function batchModal() {
-    const classes = App.classes.slice().sort((a, b) => a.grade - b.grade || a.code.localeCompare(b.code));
-    if (!classes.length) return U.toast('Chưa có lớp nào.', 'err');
+    const classes = App.shown().slice().sort((a, b) => a.grade - b.grade || a.code.localeCompare(b.code));
+    if (!classes.length) return U.toast('Không có lớp nào theo bộ lọc lớp đang chọn.', 'err');
     const [students, assess] = await Promise.all([DB.q('students'), DB.q('assessments')]);
     const KEY = 'sky_complete_opts_v1';
     let o = { org: 'TTNN Sky', title: 'Giám đốc', signer: '', issue: 'today', scores: true, certCmt: false, sumCmt: true };

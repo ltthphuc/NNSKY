@@ -492,3 +492,13 @@ table.t { width: 100%; border-collapse: collapse; }
 .date-pick { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: 0; background: none; padding: 5px; cursor: pointer; color: #6b7a90; line-height: 0; border-radius: 6px; }
 .date-pick:hover { background: #eef2f9; color: var(--ink); }
 .input.bad { border-color: var(--err); }
+
+/* lọc lớp */
+.cfbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cfbar .select { width: auto; min-width: 130px; }
+/* lịch dạy của giáo viên theo ngày */
+.tday { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+.tday-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: #f4f8fe; border-bottom: 1px solid var(--line); }
+.tsess { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid #eef2f9; }
+.tday-h + .tsess { border-top: 0; }
+.tsess.future { opacity: .6; }

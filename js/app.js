@@ -7,10 +7,33 @@
   /* ---------- dữ liệu dùng chung ---------- */
   App.classById = (id) => App.classes.find((c) => c.id === id);
   App.teacherName = (id) => (App.teachers.find((t) => t.id === id) || {}).name || 'Chưa phân công';
-  App.openClasses = () => App.classes.filter((c) => c.status !== 'closed');
+  /* Bộ lọc lớp dùng chung: năm học, học kỳ, khối, trạng thái (mặc định: các lớp đang mở) */
+  const CF_KEY = 'sky_class_filter_v1';
+  App.classFilter = (() => { try { return { year: '', term: '', grade: '', status: 'open', ...JSON.parse(localStorage.getItem(CF_KEY)) }; } catch (e) { return { year: '', term: '', grade: '', status: 'open' }; } })();
+  App.shown = () => {
+    const f = App.classFilter;
+    return App.classes.filter((c) => (!f.year || c.schoolYear === f.year) && (!f.term || c.term === f.term) && (!f.grade || String(c.grade) === String(f.grade)) && (f.status === 'all' || (f.status === 'closed') === (c.status === 'closed')));
+  };
+  App.classFilterBar = () => {
+    const f = App.classFilter, years = [...new Set(App.classes.map((c) => c.schoolYear).filter(Boolean))].sort().reverse();
+    const opt = (v, t, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${t}</option>`;
+    return `<div class="cfbar" title="Chọn các lớp hiển thị trong chương trình"><span class="small muted">Lọc lớp:</span>
+      <select class="select" data-cf="year">${opt('', 'Mọi năm học', f.year)}${years.map((y) => opt(y, 'Năm học ' + y, f.year)).join('')}</select>
+      <select class="select" data-cf="term">${opt('', 'Mọi học kỳ', f.term)}${opt('HK1', 'Học kỳ 1', f.term)}${opt('HK2', 'Học kỳ 2', f.term)}${opt('NH', 'Cả năm học', f.term)}</select>
+      <select class="select" data-cf="grade">${opt('', 'Mọi khối', f.grade)}${[1, 2, 3, 4, 5].map((g) => opt(g, 'Khối ' + g, f.grade)).join('')}</select>
+      <select class="select" data-cf="status">${opt('open', 'Lớp đang mở', f.status)}${opt('closed', 'Lớp đã đóng', f.status)}${opt('all', 'Tất cả lớp', f.status)}</select></div>`;
+  };
+  document.addEventListener('change', (e) => {
+    const t = e.target.closest && e.target.closest('[data-cf]');
+    if (!t) return;
+    App.classFilter[t.dataset.cf] = t.value;
+    try { localStorage.setItem(CF_KEY, JSON.stringify(App.classFilter)); } catch (er) { /* bỏ qua */ }
+    App.render();
+  });
+  App.openClasses = () => App.shown();
   App.classOptions = (sel, { all = false, closed = false } = {}) =>
     (all ? `<option value="">Tất cả lớp</option>` : '') +
-    (closed ? App.classes : App.openClasses())
+    (closed ? App.classes : App.shown())
       .map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.name)} · ${esc(c.code)}${c.status === 'closed' ? ' (đã đóng)' : ''}</option>`).join('');
   App.refreshClasses = async () => {
     App.classes = (await DB.q('classes')).sort((a, b) => a.grade - b.grade || String(a.code).localeCompare(String(b.code)));

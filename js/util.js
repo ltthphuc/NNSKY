@@ -89,7 +89,7 @@
   /* Tính công & lương giáo viên trong tháng từ bảng chấm công (teacherAttendance) */
   U.payrollRows = ({ classes, tAtt, teachers, month }) => {
     const byT = {};
-    const newRow = (t) => ({ teacher: t, sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0, lines: {}, missing: 0 });
+    const newRow = (t) => ({ dset: new Set(), teacher: t, sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0, lines: {}, missing: 0 });
     const today = U.today();
     const [from, to] = U.monthRange(month);
     for (const cls of classes) {
@@ -104,12 +104,12 @@
           const rate = Number(role === 'main' ? t.rateMain : t.rateAssistant) || 0;
           const r = (byT[tid] = byT[tid] || newRow(t));
           const key = cls.id + '|' + role;
-          const ln = (r.lines[key] = r.lines[key] || { cls, role, rate, sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0 });
+          const ln = (r.lines[key] = r.lines[key] || { dset: new Set(), cls, role, rate, sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0 });
           // số tiết theo lịch của buổi đó; nghỉ cả buổi hoặc nghỉ một số tiết đều bị trừ tiền
           const planned = rec && rec.planned != null ? Number(rec.planned) : Number(U.slotFor(cls, d.date).periods) || Number(cls.periods) || 0;
           const taught = rec && rec.present ? Number(rec.periods) || 0 : 0;
           const off = Math.max(0, planned - taught);
-          if (rec && rec.present) { r.sessions++; ln.sessions++; if (off > 0) { r.partial++; ln.partial++; } } else { r.absent++; ln.absent++; }
+          if (rec && rec.present) { r.sessions++; ln.sessions++; r.dset.add(d.date); ln.dset.add(d.date); if (off > 0) { r.partial++; ln.partial++; } } else { r.absent++; ln.absent++; }
           [r, ln].forEach((x) => { x.periods += taught; x.amount += taught * rate; x.planned += planned; x.off += off; x.deduct += off * rate; x.gross += planned * rate; });
         }
       }
@@ -121,6 +121,7 @@
         r.missing += U.sessions(cls, f2, to).filter((d) => d <= today && !recorded.has(d)).length;
       }
     }
+    Object.values(byT).forEach((r) => { r.days = r.dset.size; Object.values(r.lines).forEach((l) => { l.days = l.dset.size; }); });
     return Object.values(byT).sort((a, b) => a.teacher.name.localeCompare(b.teacher.name, 'vi'));
   };
   U.deductText = (s) =>

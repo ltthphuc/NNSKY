@@ -339,7 +339,7 @@ table.sg td{vertical-align:top;font-size:12pt}
   ];
 
   Views.reports = async (root) => {
-    const classes = sortCls(App.classes);
+    const classes = sortCls(App.shown());
     const o = { sheets: SHEETS.map((x) => x[0]), pick: classes.map((c) => c.id), basis: DEFAULT_BASIS, title: 'GIÁM ĐỐC', number: '01/QĐ-' + legal().abbr, each: false, recipient: 'Sở Giáo dục và Đào tạo', rnumber: '01/BC-' + legal().abbr, ...loadO() };
     o.pick = o.pick.filter((id) => classes.some((c) => c.id === id));
     const g0 = legal(), today = U.today();
@@ -356,7 +356,7 @@ table.sg td{vertical-align:top;font-size:12pt}
           ${inp('g_license', 'Giấy phép / Quyết định cho phép hoạt động số', g0.license, 'Số, ngày cấp, cơ quan cấp')}
           ${inp('g_city', 'Địa danh ghi trên văn bản', g0.city, 'Ví dụ: Thủ Đức')}
         </div><div class="row mt"><button class="btn" id="gsave">${icon('check')} Lưu thông tin</button></div></div></div>
-      <div class="card mt"><div class="card-h"><h3>2. Chọn lớp</h3><span class="small muted">Áp dụng cho quyết định mở lớp và hồ sơ Excel</span></div><div class="card-b">
+      <div class="card mt"><div class="card-h"><h3>2. Chọn lớp</h3><span class="small muted">Áp dụng cho quyết định mở lớp và hồ sơ Excel</span></div><div class="card-b"><div style="margin-bottom:10px">${App.classFilterBar()}</div>
         <div class="row" style="margin-bottom:8px"><button class="btn sm soft" id="cp_all">Chọn tất cả</button><button class="btn sm ghost" id="cp_none">Bỏ chọn</button><span class="small muted" id="cp_n"></span></div>
         <div class="rp-tests">${classes.map((c) => `<label class="ck"><input type="checkbox" data-cp="${c.id}" ${o.pick.includes(c.id) ? 'checked' : ''}> <b>${esc(c.name)}</b> <span class="muted small">(${esc(c.code || '')}) · ${esc(U.scheduleText(c))} · ${esc(tName(c.teacherId))}</span></label>`).join('')}</div></div></div>
       <div class="card mt"><div class="card-h"><h3>3. Quyết định mở lớp</h3><span class="small muted">Chọn một lớp hoặc nhiều lớp (nhiều lớp thì ghi tên các lớp vào cùng một văn bản)</span></div><div class="card-b">
@@ -415,7 +415,7 @@ table.sg td{vertical-align:top;font-size:12pt}
     q('#d_prev').onclick = run(async () => preview('Quyết định mở lớp', await decisionHtml()));
     q('#d_word').onclick = run(async () => { const h = await decisionHtml(); U.download(`Quyet_dinh_mo_lop_${U.today()}.doc`, '﻿' + asWord(h), 'application/msword'); U.toast('Đã tạo file Word', 'ok'); });
     const reportHtml = async () => {
-      const cls = sortCls(App.classes), D = await loadAll(), per = U.periodGet(q('#r_period .period'), cls); persist();
+      const cls = sortCls(App.shown()), D = await loadAll(), per = U.periodGet(q('#r_period .period'), cls); persist();
       const op = { number: q('#r_number').value.trim() || '01/BC', date: q('#r_date').value || today, title: q('#d_title').value.trim() || 'GIÁM ĐỐC', recipient: q('#r_recipient').value.trim() || 'Sở Giáo dục và Đào tạo' };
       return wrapDoc(reportBody(gnow(), op, cls, D, per));
     };

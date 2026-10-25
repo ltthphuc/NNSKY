@@ -123,14 +123,22 @@
   /* Hai cách tính học phí (chọn theo từng lớp):
    *  - 'absence': học phí lớp trừ tiền theo số buổi nghỉ (nghỉ từ N buổi mới trừ)
    *  - 'attend' : tính theo số buổi đã đi học × đơn giá buổi, tối đa bằng học phí tháng của lớp (mức trần) */
-  U.calcFee = (cls, settings, present, absent, ratio = 1) => {
+  U.calcFee = (cls, settings, present, absent, ratio = 1, ex = {}) => {
     // ratio < 1: học sinh vào học giữa tháng, học phí cố định chỉ tính theo số buổi có theo học
+    // ex: { S: số buổi của cả tháng, partial: tính đến giữa tháng, sessions: số buổi của học sinh trong phần tháng đó }
     const fee = Number(cls.fee) || 0;
-    const base = cls.feeMode !== 'attend' && ratio < 1 ? Math.round((fee * ratio) / 1000) * 1000 : fee;
     if (cls.feeMode === 'attend') {
-      const charge = Math.min(base, present * (Number(cls.sessionRate) || 0));
-      return { base, deduct: base - charge, total: charge };
+      const rate = Number(cls.sessionRate) || 0;
+      if (ex.partial) { // tính tiền đến một ngày giữa tháng: số buổi và học phí theo phần tháng đó
+        const b = Math.min(fee, rate * (ex.sessions || 0)), c = Math.min(b, rate * present);
+        return { base: b, deduct: b - c, total: c };
+      }
+      // tháng chỉ có 8 buổi: nghỉ 1 buổi vẫn đủ học phí; tháng 9-10 buổi: 50k x số buổi đi học (tối đa học phí tháng)
+      const grace = ratio >= 1 && ex.S && ex.S <= 8 && present > 0 ? 1 : 0;
+      const charge = Math.min(fee, rate * (present + grace));
+      return { base: fee, deduct: fee - charge, total: charge };
     }
+    const base = cls.feeMode !== 'attend' && ratio < 1 ? Math.round((fee * ratio) / 1000) * 1000 : fee;
     const from1 = Math.max(1, Number(settings.deductFrom) || 1);
     const deduct = settings.deductAmount > 0 && absent >= from1 ? Math.min(base, absent * settings.deductAmount) : 0;
     return { base, deduct, total: Math.max(0, base - deduct) };
@@ -163,13 +171,16 @@
         if (st.status === 'inactive' && !has) continue;
         let present = 0, absent = 0;
         myDocs.forEach((d) => { const v = d.records && d.records[st.id]; if (v === true) present++; else if (v === false) absent++; });
-        const { base, deduct, total: calc } = U.calcFee(cls, settings, present, absent, ratio);
+        // buổi chưa đến (từ hôm nay trở đi) mà chưa điểm danh: mặc định là đi học đủ
+        if (cls.feeMode === 'attend') mine.forEach((d) => { if (d >= today && !myDocs.some((x) => x.date === d && x.records && st.id in x.records)) present++; });
+        const partial = !!(clip && clip.to && clip.to < to);
+        const { base, deduct, total: calc } = U.calcFee(cls, settings, present, absent, ratio, { S: scheduled.length, partial, sessions: mine.length });
         const whole = !clip || ((!clip.from || clip.from <= from) && (!clip.to || clip.to >= to));
         const pay = whole ? payments.find((p) => p.id === `${st.id}_${month}`) : null;
         rows.push({
           student: st, cls, scheduled: mine.length, classScheduled: scheduled.length, ratio, recorded: docs.length, missing, present, absent,
           base: pay ? pay.base : base, deduct: pay ? pay.deduct : deduct, total: pay ? pay.amount : calc, calc,
-          paid: !!(pay && pay.paid), pay,
+          paid: !!(pay && pay.paid), pay, partial, cut: partial ? clip.to : '',
         });
       }
     }

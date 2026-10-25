@@ -453,8 +453,9 @@
 
   /* Phiếu thu / phiếu báo học phí dạng Excel (sửa trực tiếp được). groups: [{ student, cls, blank?, items:[{month,total,paid,cut}] }]
    * o: { per, kind:'thu'|'bao', qr, qrSrc, due, showCode } */
-  X.exportReceipts = safe(async (groups, o, settings, filename) => {
+  X.exportReceipts = safe(async (groups, o, settings, filename, extraSheets = []) => {
     const wb = newBook();
+    extraSheets.forEach((sp) => addSheet(wb, sp)); // các sheet danh sách đặt trước sheet phiếu
     const per = o.per || 4, cols = per >= 4 ? 2 : 1, bao = o.kind === 'bao', NC = 6;
     const ws = wb.addWorksheet(bao ? 'Phiếu báo học phí' : 'Phiếu thu học phí', {
       pageSetup: { ...pageSetup(false), fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } }, views: [{ showGridLines: false }],

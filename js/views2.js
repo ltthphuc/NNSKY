@@ -670,8 +670,8 @@
   const dueBind = (el, id) => { el.querySelector('#' + id + 'k').onchange = (e) => { el.querySelector('#' + id + 'd').style.display = e.target.value === 'day' ? '' : 'none'; }; };
   const dueOf = (el, id, monthEnd) => { const k = el.querySelector('#' + id + 'k').value; return k === 'none' ? '' : k === 'day' ? (el.querySelector('#' + id + 'd').value || monthEnd) : monthEnd; };
   /* Xuất phiếu: in / PDF / Excel sửa được */
-  const outputReceipts = async (fmt, groups, o, name) => {
-    if (fmt === 'xlsx') { await X.exportReceipts(groups, { ...o, qrSrc: QR_SRC }, App.settings, `${name}.xlsx`); return; }
+  const outputReceipts = async (fmt, groups, o, name, extraSheets) => {
+    if (fmt === 'xlsx') { await X.exportReceipts(groups, { ...o, qrSrc: QR_SRC }, App.settings, `${name}.xlsx`, extraSheets); return; }
     const html = receiptsHTML(groups, o, App.settings);
     if (fmt === 'pdf') { U.toast('Đang tạo file PDF, vui lòng chờ…', 'ok'); await U.htmlToPdf(html, `${name}.pdf`); U.toast('Đã tạo file PDF', 'ok'); return; }
     U.printHTML(html);
@@ -764,7 +764,13 @@
   const checkSpecs = (G, month) => {
     const info = [`Tháng thu: ${U.monthLabel(month)} · Ngày lập: ${U.fmtDate(U.today())}`];
     const MONEYF = '#,##0" đ"';
+    const detail = (g) => g.items.map((r) => `T${Number(r.month.slice(5))}: ${money(r.total)}`).join('\n');
+    const g1set = new Set(G.g1);
     return [
+      { name: 'Tổng', title: `DANH SÁCH TỔNG HỢP HỌC PHÍ ${U.monthLabel(month).toUpperCase()}`, info: [...info, `Nhóm 1 (đóng đủ ${money(400000)}): ${G.g1.length} học sinh · Nhóm 2 (số tiền khác): ${G.g2.length} học sinh · Tổng phải thu: ${money(G.all.reduce((a, g) => a + g.due, 0))}`],
+        cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Lớp', w: 12, align: 'center' }, { h: 'Họ và tên', w: 30, bold: true }, { h: 'Nhóm', w: 22, align: 'center' }, { h: 'Chi tiết các tháng', w: 30, wrap: true }, { h: 'Phải đóng', w: 16, fmt: MONEYF, bold: true }, { h: 'Lý do', w: 44, wrap: true }, { h: 'Đã thu', w: 10, align: 'center' }],
+        rows: G.all.map((g, i) => [i + 1, g.cls.name, g.student.name, g1set.has(g) ? 'Nhóm 1 (đủ 400k)' : 'Nhóm 2 (khác 400k)', detail(g), g.due, g.reason, '']),
+        total: ['', '', 'TỔNG CỘNG', '', '', G.all.reduce((a, g) => a + g.due, 0), '', ''], inputCols: [7], freezeCols: 3 },
       { name: 'Nhóm 1 - đủ 400k', title: `DANH SÁCH NHÓM 1: ĐÓNG ĐỦ ${money(400000).toUpperCase()}`, info: [...info, `Số học sinh: ${G.g1.length}`],
         cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Lớp', w: 12, align: 'center' }, { h: 'Họ và tên', w: 30, bold: true }, { h: 'Số tiền', w: 16, fmt: MONEYF }, { h: 'Đã thu', w: 10, align: 'center' }],
         rows: G.g1.map((g, i) => [i + 1, g.cls.name, g.student.name, g.due, '']), total: ['', '', 'TỔNG NHÓM 1', G.g1.reduce((a, g) => a + g.due, 0), ''], inputCols: [4], freezeCols: 3 },
@@ -960,7 +966,7 @@
           }
           if (w.querySelector('#gown').checked) G.g2.forEach((g) => out.push(g));
           if (!out.length) throw new Error('Không có phiếu nào để in.');
-          await outputReceipts(w.querySelector('#gfmt').value, out, o, `Phieu_hoc_phi_theo_nhom_${month}`);
+          await outputReceipts(w.querySelector('#gfmt').value, out, o, `Phieu_hoc_phi_theo_nhom_${month}`, checkSpecs(G, month));
         },
       });
       const q = (sel) => m.el.querySelector(sel);

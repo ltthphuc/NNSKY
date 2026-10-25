@@ -1142,7 +1142,7 @@
           const t = rec.present ? Number(rec.periods) || 0 : 0, o = Math.max(0, pl - t);
           if (rec.present) { sess++; daySet.add(d); } else absent++;
           planned += pl; taught += t; off += o;
-          cells[d] = { s: !rec.present ? 'V' : o > 0 ? `${t}/${pl}` : String(t), t, o };
+          cells[d] = { s: !rec.present ? 'X' : o > 0 ? `${t}/${pl}` : '✓', t, o };
         });
         return { c, dates: shown, cells, sess, absent, planned, taught, off, daySet, days: daySet.size, amount: taught * rate(c), rate: rate(c) };
       }).filter((x) => x.dates.length);
@@ -1169,10 +1169,10 @@
       return {
         name: t.name, title: `BẢNG CHẤM CÔNG VÀ LƯƠNG GIÁO VIÊN ${t.name.toUpperCase()}`, landscape: true,
         info: [per.label, `Đơn giá: ${money(t.rateMain)}/tiết khi dạy chính, ${money(t.rateAssistant)}/tiết khi trợ giảng · Thành tiền = số tiết đã dạy × đơn giá`],
-        cols: [{ h: 'Lớp', w: 22, bold: true }, { h: 'Vai trò', w: 16 }, ...mx.heads.map((h) => ({ h, w: mx.byMonth ? 14 : 11, align: 'center' })), { h: 'Số ngày đi làm', w: 11, align: 'center' }, { h: 'Tiết theo lịch', w: 11, align: 'center' }, { h: 'Tiết đã dạy', w: 10, align: 'center', bold: true }, { h: 'Tiết nghỉ', w: 10, align: 'center' }, { h: 'Thành tiền', w: 16, fmt: '#,##0" đ"', bold: true }],
+        cols: [{ h: 'Lớp', w: 22, bold: true }, { h: 'Vai trò', w: 16 }, ...mx.heads.map((h) => ({ h, w: mx.byMonth ? 14 : 11, align: 'center', bold: true, color: (v) => (v === 'X' ? 'FFC62828' : v === '✓' ? 'FF0E7A3E' : /\//.test(String(v)) ? 'FFB45309' : undefined) })), { h: 'Số ngày đi làm', w: 11, align: 'center' }, { h: 'Tiết theo lịch', w: 11, align: 'center' }, { h: 'Tiết đã dạy', w: 10, align: 'center', bold: true }, { h: 'Tiết nghỉ', w: 10, align: 'center' }, { h: 'Thành tiền', w: 16, fmt: '#,##0" đ"', bold: true }],
         rows: cd.data.map((x) => [lab(x.c), U.roleName(U.roleOf(x.c, t.id)), ...mx.heads.map((_, i) => mx.cellOf(x, i)), x.days, x.planned, x.taught, x.off, x.amount]),
         total: ['TỔNG CỘNG', '', ...mx.heads.map(() => ''), cd.tot.days, cd.tot.planned, cd.tot.taught, cd.tot.off, cd.tot.amount], freezeCols: 2, signature: true,
-        notes: ['Số = số tiết đã dạy, V = nghỉ cả buổi, a/b = dạy a trên b tiết, · = chưa điểm danh.' + (mx.byMonth ? ' Kỳ dài nên gom theo tháng.' : ''), 'Các buổi trước ngày giáo viên bắt đầu dạy không tính là nghỉ.'],
+        notes: ['✓ = dạy đủ, X = nghỉ cả buổi, a/b = dạy a trên b tiết, · = chưa điểm danh.' + (mx.byMonth ? ' Kỳ dài nên gom theo tháng.' : ''), 'Các buổi trước ngày giáo viên bắt đầu dạy không tính là nghỉ.'],
       };
     };
 
@@ -1193,11 +1193,11 @@
           const per = U.periodGet(q('.period'), own), cd = calcTeacher(tid, per);
           if (!cd.data.length) { q('#rout').innerHTML = '<div class="muted">Không có buổi dạy nào trong kỳ này (tính từ ngày giáo viên bắt đầu dạy).</div>'; cur = null; return; }
           const mx = matrixOf(cd);
-          const colorOf = (s) => (s === 'V' ? 'var(--err)' : /\//.test(s) || /nghỉ/.test(s) ? 'var(--warn)' : s === '·' ? 'var(--muted)' : 'var(--ok)');
+          const colorOf = (s) => (s === 'X' ? 'var(--err)' : /\//.test(s) || /nghỉ/.test(s) ? 'var(--warn)' : s === '·' ? 'var(--muted)' : 'var(--ok)');
           q('#rout').innerHTML = `<div class="alert ok" style="margin-bottom:10px"><b>${esc(per.label)}</b> · ${cd.tot.days} ngày đi làm · ${cd.tot.planned} tiết theo lịch · ${cd.tot.taught} tiết đã dạy · ${cd.tot.off} tiết nghỉ · Thành tiền (theo số tiết đã dạy): <b>${money(cd.tot.amount)}</b></div>
             <div class="table-wrap"><table class="t grid-mx"><thead><tr><th>Lớp</th>${mx.heads.map((h) => `<th>${esc(h)}</th>`).join('')}<th>Ngày đi làm</th><th>Tiết theo lịch</th><th>Tiết đã dạy</th><th>Tiết nghỉ</th><th class="right">Thành tiền</th></tr></thead><tbody>
-            ${cd.data.map((x) => `<tr><td class="name">${esc(x.c.name)}<div class="small muted">${U.roleName(U.roleOf(x.c, tid))}</div></td>${mx.heads.map((_, i) => { const s = mx.cellOf(x, i); return `<td style="color:${colorOf(s)};font-weight:600">${esc(s)}</td>`; }).join('')}<td>${x.days}</td><td>${x.planned}</td><td><b>${x.taught}</b></td><td>${x.off || 0}</td><td class="right mono"><b>${money(x.amount)}</b></td></tr>`).join('')}
-            </tbody></table></div><div class="hint">Số = số tiết đã dạy, V = nghỉ cả buổi, a/b = dạy a trên b tiết, · = chưa điểm danh. Chỉ tính từ ngày giáo viên bắt đầu dạy.${mx.byMonth ? ' Kỳ dài nên gom theo tháng.' : ''}</div>`;
+            ${cd.data.map((x) => `<tr><td class="name">${esc(x.c.name)}<div class="small muted">${U.roleName(U.roleOf(x.c, tid))}</div></td>${mx.heads.map((_, i) => { const s = mx.cellOf(x, i); return `<td style="color:${colorOf(s)};font-weight:700;font-size:1.05em">${esc(s)}</td>`; }).join('')}<td>${x.days}</td><td>${x.planned}</td><td><b>${x.taught}</b></td><td>${x.off || 0}</td><td class="right mono"><b>${money(x.amount)}</b></td></tr>`).join('')}
+            </tbody></table></div><div class="hint">✓ = dạy đủ, X = nghỉ cả buổi, a/b = dạy a trên b tiết, · = chưa điểm danh. Chỉ tính từ ngày giáo viên bắt đầu dạy.${mx.byMonth ? ' Kỳ dài nên gom theo tháng.' : ''}</div>`;
           cur = { per, spec: matrixSpec(cd, per, (c) => c.name) };
         } catch (er) { U.toast(er.message, 'err'); }
       };

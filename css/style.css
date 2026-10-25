@@ -483,3 +483,12 @@ table.t { width: 100%; border-collapse: collapse; }
 .cm-t { font-weight: 700; margin: 0 0 8px 2px; color: var(--navy-2); }
 .cm-t span { font-weight: 500; color: var(--muted); font-size: 13px; }
 .chip-month .strip { margin-bottom: 0; }
+
+/* ô ngày dd/mm/yyyy */
+.dwrap { position: relative; display: block; }
+.dwrap.inl { display: inline-block; }
+.dwrap > .input { width: 100%; }
+.dwrap.inl > .input { width: auto; min-width: 150px; }
+.date-pick { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: 0; background: none; padding: 5px; cursor: pointer; color: #6b7a90; line-height: 0; border-radius: 6px; }
+.date-pick:hover { background: #eef2f9; color: var(--ink); }
+.input.bad { border-color: var(--err); }

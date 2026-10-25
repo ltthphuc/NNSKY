@@ -14,7 +14,7 @@
   U.parse = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
   U.today = () => U.ymd(new Date());
   U.fmtDate = (s) => (s ? s.split('-').reverse().join('/') : '');
-  U.shortDate = (s) => (s ? s.slice(8) + '/' + s.slice(5, 7) : '');
+  U.shortDate = (s) => (s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : ''); // dd/mm/yyyy
   U.dayName = (d) => (d === 0 ? 'CN' : 'Thứ ' + (d + 1));
   U.dayShort = (d) => (d === 0 ? 'CN' : 'T' + (d + 1));
   U.monthLabel = (m) => 'Tháng ' + Number(m.slice(5)) + '/' + m.slice(0, 4);

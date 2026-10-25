@@ -379,7 +379,7 @@
       name: 'Điểm danh', title: `BẢNG ĐIỂM DANH ${opt.label || U.monthLabel(month).toUpperCase()}`,
       info: [`Lớp: ${cls.name} (${cls.code}) · ${U.scheduleText(cls)}`, `Giáo viên: ${App.teacherName(cls.teacherId)}${cls.assistantId ? ' · Trợ giảng: ' + App.teacherName(cls.assistantId) : ''}`],
       cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Mã HS', w: 20 }, { h: 'Họ và tên', w: 28, bold: true },
-        ...dates.map((d) => ({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 8, align: 'center', color: mark, bold: true })),
+        ...dates.map((d) => ({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 11, align: 'center', color: mark, bold: true })),
         { h: 'Có mặt', w: 9, align: 'center', color: () => 'FF0E7A3E', bold: true }, { h: 'Vắng', w: 9, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : 'FF8A97AD'), bold: true }],
       rows, freezeCols: 3, notes: ['Ghi chú: ✓ = có mặt, V = vắng, ô trống = chưa điểm danh. File này dùng được làm mẫu để nhập lại điểm danh (✓ hoặc x = có mặt, V = vắng).'], signature: true,
     });
@@ -500,7 +500,7 @@
         q++;
         for (let k = 0; k < maxItems; k++) {
           const it = g.items[k];
-          const vals = it ? [U.monthLabel(it.month).replace('Tháng ', 'T') + (it.cut ? ` (đến ${U.fmtDate(it.cut).slice(0, 5)})` : ''), it.total, it.paid ? 'Đã đóng' : 'Chưa đóng'] : ['', '', ''];
+          const vals = it ? [U.monthLabel(it.month).replace('Tháng ', 'T') + (it.cut ? ` (đến ${U.fmtDate(it.cut)})` : ''), it.total, it.paid ? 'Đã đóng' : 'Chưa đóng'] : ['', '', ''];
           vals.forEach((v, i) => { const c = ws.getCell(q, c0 + i); c.value = v === '' ? null : v; c.font = font(10.5, i === 1, i === 2 ? (it && it.paid ? 'FF0E7A3E' : 'FFD9730D') : 'FF1B2B45'); c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border; if (i === 1) c.numFmt = MONEY; });
           q++;
         }
@@ -513,7 +513,7 @@
         };
         totRow(multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG', tot, 'FFFFE58A');
         if (anyOwe) { if (multi && owe !== tot) totRow('CÒN PHẢI ĐÓNG', owe, 'FFFFD9B0'); else q++; }
-        span(1, 3, o.due ? `PH vui lòng hoàn thành học phí trước ngày ${U.fmtDate(o.due).slice(0, 5)} để Công ty hoàn thành việc quyết toán thuế.` : '', font(9.5, false, 'FF8A1F11')); q++;
+        span(1, 3, o.due ? `PH vui lòng hoàn thành học phí trước ngày ${U.fmtDate(o.due)} để Công ty hoàn thành việc quyết toán thuế.` : '', font(9.5, false, 'FF8A1F11')); q++;
         span(1, 3, 'Trân trọng cảm ơn Quý phụ huynh!', font(10.5, true, 'FFC2185B'));
         for (let i = 4; i <= 6; i++) { const c = ws.getCell(q, c0 + i - 1); c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; }
         ws.mergeCells(q, c0 + 3, q, c0 + 5);
@@ -845,7 +845,7 @@
       name: 'Chấm công GV', title: `BẢNG CHẤM CÔNG GIÁO VIÊN ${U.monthLabel(month).toUpperCase()}`,
       info: ['Mỗi ô là số tiết giáo viên đã dạy trong buổi đó (ô trống = chưa điểm danh, V = nghỉ không dạy).'],
       cols: [{ h: 'Mã lớp', w: 14, align: 'center' }, { h: 'Lớp', w: 12 }, { h: 'Giáo viên', w: 26, bold: true }, { h: 'Vai trò', w: 16 },
-        ...dates.map((d) => ({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 8, align: 'center', color: (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E'), bold: true })),
+        ...dates.map((d) => ({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 11, align: 'center', color: (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E'), bold: true })),
         { h: 'Tổng tiết', w: 11, align: 'center', bold: true }],
       rows, freezeCols: 3, notes: ['File này dùng được làm mẫu để nhập lại chấm công: điền số tiết đã dạy vào ô của buổi học (ví dụ 2), hoặc V nếu nghỉ.'],
     });

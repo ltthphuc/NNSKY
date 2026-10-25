@@ -246,7 +246,7 @@
     if (o.absent) add({ h: 'Số buổi vắng', w: 13, align: 'center', color: (v) => (v > 0 ? 'FFC62828' : undefined), bold: true, sum: true }, (s) => countOf(s, false));
     if (o.detail) {
       const dates = [...new Set(classes.flatMap((c) => U.sessions(c, from, to)))].filter((d) => per.kind === 'month' || d <= U.today()).sort();
-      dates.forEach((d) => add({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 8, align: 'center', bold: true, color: (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E') }, (s) => {
+      dates.forEach((d) => add({ h: `${U.dayShort(U.parse(d).getDay())}\n${U.shortDate(d)}`, w: 11, align: 'center', bold: true, color: (v) => (v === 'V' ? 'FFC62828' : 'FF0E7A3E') }, (s) => {
         const doc = mdocs.find((x) => x.classId === s.classId && x.date === d);
         const v = doc && doc.records && doc.records[s.id];
         return v === true ? '✓' : v === false ? 'V' : '';

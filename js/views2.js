@@ -139,7 +139,7 @@
           <div class="sticky-bar"><button class="btn ok lg" id="save" ${roster().length ? '' : 'disabled'}>${icon('check')} Lưu điểm danh</button><button class="btn ghost" id="mkass">${icon('star')} Tạo đánh giá cho buổi này</button></div>
         </div>` : ''}
         ${students.length && mss.length ? `<div class="card mt"><div class="card-h"><h3>Tổng hợp ${U.monthLabel(month).toLowerCase()}</h3><span class="small muted">${esc(U.feeRuleText(cls, settings))}</span></div>
-          <div class="table-wrap"><table class="t grid-mx"><thead><tr><th>#</th><th>Học sinh</th>${mss.map((d) => `<th>${U.shortDate(d)}</th>`).join('')}<th>Có mặt</th><th>Vắng</th><th class="right">Học phí tạm tính</th></tr></thead><tbody>${mx}</tbody></table></div></div>` : ''}`;
+          <div class="table-wrap"><table class="t grid-mx"><thead><tr><th>#</th><th>Học sinh</th>${mss.map((d) => `<th>${U.shortDate(d).replace(/\/(\d{4})$/, '<br>$1')}</th>`).join('')}<th>Có mặt</th><th>Vắng</th><th class="right">Học phí tạm tính</th></tr></thead><tbody>${mx}</tbody></table></div></div>` : ''}`;
     };
 
     const updateCounts = () => {
@@ -698,9 +698,9 @@
         ${bao ? `<div class="hi">Kính gửi Quý phụ huynh${g.blank ? '' : ' em <b>' + nm + '</b> · <b>' + cn + '</b>' + (o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : '')},<br>Trung tâm xin thông báo học phí như sau:</div>`
           : g.blank ? '' : `<div class="who">Học sinh: <b>${nm}</b> · <b>${cn}</b>${o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>`}
         <div class="body"><div class="main"><table class="m"><thead><tr><th>Tháng</th><th>Phải đóng</th><th>Tình trạng</th></tr></thead><tbody>
-        ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}${r.cut ? ` <small>(tính đến ${U.fmtDate(r.cut).slice(0, 5)})</small>` : ''}</td><td class="r"><b>${money(r.total)}</b></td><td class="c"><span class="${r.paid ? 'ok' : 'no'}">${r.paid ? 'Đã đóng' : 'Chưa đóng'}</span></td></tr>`).join('')}</tbody></table>
+        ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}${r.cut ? ` <small>(tính đến ${U.fmtDate(r.cut)})</small>` : ''}</td><td class="r"><b>${money(r.total)}</b></td><td class="c"><span class="${r.paid ? 'ok' : 'no'}">${r.paid ? 'Đã đóng' : 'Chưa đóng'}</span></td></tr>`).join('')}</tbody></table>
         <div class="tot"><span>${multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG'}</span><b>${money(tot)}</b></div>${multi && owe !== tot ? `<div class="tot owe"><span>CÒN PHẢI ĐÓNG</span><b>${money(owe)}</b></div>` : ''}
-        ${o.due ? `<div class="due">PH vui lòng hoàn thành học phí trước ngày <b>${U.fmtDate(o.due).slice(0, 5)}</b> để Công ty hoàn thành việc quyết toán thuế.</div>` : ''}
+        ${o.due ? `<div class="due">PH vui lòng hoàn thành học phí trước ngày <b>${U.fmtDate(o.due)}</b> để Công ty hoàn thành việc quyết toán thuế.</div>` : ''}
         <div class="thx">Trân trọng cảm ơn Quý phụ huynh!</div>
         </div>${qr}</div>
         ${bao ? `<div class="sg one"><div>Trung tâm<br><i>(ký, đóng dấu)</i></div></div>`

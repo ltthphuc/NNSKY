@@ -342,6 +342,29 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
 
+  const loaded = {};
+  U.loadScript = (src) => loaded[src] || (loaded[src] = new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { delete loaded[src]; rej(new Error('Không tải được thư viện (cần kết nối mạng).')); }; document.head.appendChild(s); }));
+  /* Tạo file PDF (mỗi phần tử .pg là một trang A4) từ chuỗi HTML */
+  U.htmlToPdf = async (html, filename) => {
+    await Promise.all([U.loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'), U.loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')]);
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;background:#fff';
+    document.body.appendChild(f);
+    try {
+      f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+      await Promise.all([...[...f.contentDocument.images].filter((i) => !i.complete).map((i) => new Promise((r) => { i.onload = i.onerror = r; })), new Promise((r) => setTimeout(r, 400))]);
+      const pages = [...f.contentDocument.querySelectorAll('.pg')];
+      if (!pages.length) throw new Error('Không có trang nào để xuất.');
+      const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      for (let i = 0; i < pages.length; i++) {
+        const canvas = await window.html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        if (i) pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+      }
+      pdf.save(filename);
+    } finally { f.remove(); }
+  };
+
   U.printHTML = (html) => {
     const f = document.createElement('iframe');
     f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';

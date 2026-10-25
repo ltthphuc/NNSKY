@@ -451,6 +451,97 @@
     await saveBook(wb, filename);
   });
 
+  /* Phiếu thu / phiếu báo học phí dạng Excel (sửa trực tiếp được). groups: [{ student, cls, blank?, items:[{month,total,paid,cut}] }]
+   * o: { per, kind:'thu'|'bao', qr, qrSrc, due, showCode } */
+  X.exportReceipts = safe(async (groups, o, settings, filename) => {
+    const wb = newBook();
+    const per = o.per || 4, cols = per >= 4 ? 2 : 1, bao = o.kind === 'bao', NC = 6;
+    const ws = wb.addWorksheet(bao ? 'Phiếu báo học phí' : 'Phiếu thu học phí', {
+      pageSetup: { ...pageSetup(false), fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } }, views: [{ showGridLines: false }],
+    });
+    const W = [12, 14, 12, 9, 9, 9];
+    for (let k = 0; k < cols; k++) {
+      W.forEach((w, i) => { ws.getColumn(1 + k * (NC + 1) + i).width = w; });
+      if (k < cols - 1) ws.getColumn(NC + 1 + k * (NC + 1)).width = 2;
+    }
+    let imgId = null;
+    if (o.qr !== false && o.qrSrc) { try { imgId = wb.addImage({ buffer: await (await fetch(o.qrSrc)).arrayBuffer(), extension: 'jpeg' }); } catch (e) { /* bỏ qua nếu không tải được ảnh */ } }
+    const maxItems = Math.max(1, ...groups.map((g) => g.items.length));
+    const anyOwe = groups.some((g) => g.items.length > 1 && g.items.some((r) => !r.paid) && g.items.filter((r) => !r.paid).reduce((a, r) => a + r.total, 0) !== g.items.reduce((a, r) => a + r.total, 0));
+    const BLUE2 = 'FF4F8EF7', LIGHT = 'FFDFF0FF';
+    const edge = { style: 'medium', color: { argb: BLUE2 } };
+    const font = (size, bold, color = 'FF1B2B45', italic = false) => ({ name: 'Arial', size, bold, italic, color: { argb: color } });
+    const rowsPerBlock = 4 + 1 + maxItems + 1 + (anyOwe ? 1 : 0) + 1 + 1 + 1 + 1;
+    let r = 1;
+    const pageRows = per / cols;
+    for (let p = 0; p < groups.length; p += cols) {
+      const pair = groups.slice(p, p + cols);
+      const top = r;
+      const heights = [20, 26, 20, bao ? 20 : 6, 22, ...Array(maxItems).fill(22), 26, ...(anyOwe ? [22] : []), 34, 34, 46, 24];
+      heights.forEach((h, k) => { ws.getRow(top + k).height = h; });
+      const last = top + heights.length - 1;
+      pair.forEach((g, side) => {
+        const c0 = 1 + side * (NC + 1);
+        let q = top;
+        const span = (from, to, value, f, fill, align = 'center') => {
+          for (let i = from; i <= to; i++) { const c = ws.getCell(q, c0 + i - 1); if (fill) c.fill = fillBg(fill); c.alignment = { horizontal: align, vertical: 'middle', wrapText: true }; }
+          ws.mergeCells(q, c0 + from - 1, q, c0 + to - 1);
+          const c = ws.getCell(q, c0 + from - 1); c.value = value; c.font = f;
+        };
+        const nm = g.blank ? '' : g.student.name, cn = g.blank ? '' : g.cls.name;
+        span(1, NC, settings.centerName, font(11, true, 'FFFFFFFF'), BLUE2); q++;
+        span(1, NC, g.items.length > 1 ? (bao ? 'PHIẾU BÁO HỌC PHÍ' : 'PHIẾU THU HỌC PHÍ') : `${bao ? 'PHIẾU BÁO HỌC PHÍ' : 'PHIẾU THU HỌC PHÍ'} - ${U.monthLabel(g.items[0].month).toUpperCase()}`, font(14, true, 'FFFFFFFF'), 'FF8A7BF0'); q++;
+        const who = g.blank ? '' : `${nm} · ${cn}${o.showCode !== false && g.cls.code ? ' (' + g.cls.code + ')' : ''}`;
+        span(1, NC, bao ? `Kính gửi Quý phụ huynh${g.blank ? '' : ' em ' + who},` : g.blank ? '' : `Học sinh: ${who}`, font(10.5, false)); q++;
+        span(1, NC, bao ? 'Trung tâm xin thông báo học phí như sau:' : '', font(10.5, false)); q++;
+        const tableTop = q;
+        ['Tháng', 'Phải đóng', 'Tình trạng'].forEach((h, i) => { const c = ws.getCell(q, c0 + i); c.value = h; c.font = font(10, true, 'FF1B4F86'); c.fill = fillBg(LIGHT); c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border; });
+        q++;
+        for (let k = 0; k < maxItems; k++) {
+          const it = g.items[k];
+          const vals = it ? [U.monthLabel(it.month).replace('Tháng ', 'T') + (it.cut ? ` (đến ${U.fmtDate(it.cut).slice(0, 5)})` : ''), it.total, it.paid ? 'Đã đóng' : 'Chưa đóng'] : ['', '', ''];
+          vals.forEach((v, i) => { const c = ws.getCell(q, c0 + i); c.value = v === '' ? null : v; c.font = font(10.5, i === 1, i === 2 ? (it && it.paid ? 'FF0E7A3E' : 'FFD9730D') : 'FF1B2B45'); c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = border; if (i === 1) c.numFmt = MONEY; });
+          q++;
+        }
+        const tot = g.items.reduce((a, it) => a + it.total, 0), owe = g.items.filter((it) => !it.paid).reduce((a, it) => a + it.total, 0), multi = g.items.length > 1;
+        const totRow = (label, val, fill) => {
+          for (let i = 1; i <= 3; i++) { const c = ws.getCell(q, c0 + i - 1); c.fill = fillBg(fill); c.border = border; c.alignment = { horizontal: 'center', vertical: 'middle' }; }
+          ws.mergeCells(q, c0, q, c0 + 1);
+          const a = ws.getCell(q, c0); a.value = label; a.font = font(10.5, true, 'FF7A2250');
+          const b = ws.getCell(q, c0 + 2); b.value = val; b.numFmt = MONEY; b.font = font(11, true, 'FF7A2250'); q++;
+        };
+        totRow(multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG', tot, 'FFFFE58A');
+        if (anyOwe) { if (multi && owe !== tot) totRow('CÒN PHẢI ĐÓNG', owe, 'FFFFD9B0'); else q++; }
+        span(1, 3, o.due ? `PH vui lòng hoàn thành học phí trước ngày ${U.fmtDate(o.due).slice(0, 5)} để Công ty hoàn thành việc quyết toán thuế.` : '', font(9.5, false, 'FF8A1F11')); q++;
+        span(1, 3, 'Trân trọng cảm ơn Quý phụ huynh!', font(10.5, true, 'FFC2185B'));
+        for (let i = 4; i <= 6; i++) { const c = ws.getCell(q, c0 + i - 1); c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; }
+        ws.mergeCells(q, c0 + 3, q, c0 + 5);
+        const cap = ws.getCell(q, c0 + 3); cap.value = o.qr !== false ? 'Quý PH có thể đóng HP qua tài khoản trên hoặc đóng trực tiếp' : ''; cap.font = font(8.5, true, 'FF1B4F86'); q++;
+        // chỗ ký
+        ws.mergeCells(q, c0, q, c0 + 2); ws.mergeCells(q, c0 + 3, q, c0 + 5);
+        const s1 = ws.getCell(q, c0), s2 = ws.getCell(q, c0 + 3);
+        s1.value = bao ? '' : 'Phụ huynh\n(ký, ghi rõ họ tên)'; s2.value = bao ? 'Trung tâm\n(ký, đóng dấu)' : 'Người thu tiền\n(ký, ghi rõ họ tên)';
+        [s1, s2].forEach((c) => { c.font = font(9, false, 'FF1B2B45', true); c.alignment = { horizontal: 'center', vertical: 'top', wrapText: true }; });
+        q++;
+        // dòng ghi chú để tự điền
+        ws.mergeCells(q, c0 + 1, q, c0 + NC - 1);
+        const nt = ws.getCell(q, c0); nt.value = 'Note:'; nt.font = font(10, true); nt.alignment = { horizontal: 'left', vertical: 'bottom', indent: 1 };
+        for (let i = 2; i <= NC; i++) ws.getCell(q, c0 + i - 1).border = { bottom: { style: 'dotted', color: { argb: 'FF6B7A90' } } };
+        // khung viền
+        for (let rr = top; rr <= last; rr++) for (let cc = 1; cc <= NC; cc++) {
+          const cell = ws.getCell(rr, c0 + cc - 1), bd = { ...(cell.border || {}) };
+          if (cc === 1) bd.left = edge; if (cc === NC) bd.right = edge; if (rr === top) bd.top = edge; if (rr === last) bd.bottom = edge;
+          cell.border = bd;
+        }
+        if (imgId !== null) ws.addImage(imgId, { tl: { col: c0 + 2.95, row: tableTop - 1 + 0.1 }, ext: { width: 118, height: 131 } });
+      });
+      r = last + 2; ws.getRow(last + 1).height = 10;
+      if (((p / cols) + 1) % pageRows === 0 && p + cols < groups.length) ws.getRow(last + 1).addPageBreak();
+    }
+    ws.pageSetup.printArea = `A1:${ws.getColumn(cols * (NC + 1) - 1).letter}${r}`;
+    await saveBook(wb, filename);
+  });
+
   /* ===== Phiếu theo từng học sinh: bảng kết quả học tập (dạng dọc) & giấy chứng nhận ===== */
   const usedNames = () => new Set();
   const sheetName = (name, used) => {

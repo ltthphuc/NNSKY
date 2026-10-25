@@ -16,9 +16,10 @@
 
   const authMsg = (e) => {
     const c = e && e.code ? e.code : '';
-    if (/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)) return new Error('Email hoặc mật khẩu không đúng.');
+    if (/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)) return new Error('Tên đăng nhập hoặc mật khẩu không đúng.');
     if (/too-many-requests/.test(c)) return new Error('Đăng nhập sai quá nhiều lần, vui lòng thử lại sau ít phút.');
-    if (/email-already-in-use/.test(c)) return new Error('Email này đã có tài khoản.');
+    if (/email-already-in-use/.test(c)) return new Error('Tên đăng nhập này đã có tài khoản, hãy chọn tên khác.');
+    if (/requires-recent-login/.test(c)) return new Error('Vui lòng đăng xuất, đăng nhập lại rồi thử lại.');
     if (/weak-password/.test(c)) return new Error('Mật khẩu quá yếu (tối thiểu 6 ký tự).');
     if (/network/.test(c)) return new Error('Mất kết nối mạng.');
     if (/permission-denied/.test(c)) return new Error('Không có quyền thực hiện thao tác này.');
@@ -132,8 +133,8 @@
         cb(u ? { uid, ...clone(u) } : null);
       },
       async login(email, pw) {
-        const hit = Object.entries(store.users).find(([, u]) => u.email.toLowerCase() === email.trim().toLowerCase());
-        if (!hit || hit[1].password !== pw) throw new Error('Email hoặc mật khẩu không đúng.');
+        const hit = Object.entries(store.users).find(([, u]) => u.email.toLowerCase() === U.loginId(email));
+        if (!hit || hit[1].password !== pw) throw new Error('Tên đăng nhập hoặc mật khẩu không đúng.');
         if (hit[1].active === false) throw new Error('Tài khoản đã bị khóa.');
         sessionStorage.setItem(SKEY, hit[0]);
         listener({ uid: hit[0], ...clone(hit[1]) });
@@ -154,12 +155,18 @@
       },
       async del(col, id) { delete store[col][id]; persist(); },
       async updateMany(col, ids, patch) { ids.forEach((id) => { if (store[col][id]) Object.assign(store[col][id], patch); }); persist(); },
-      async createTeacher({ email, password, name, phone, rateMain, rateAssistant }) {
-        if (Object.values(store.users).some((u) => u.email.toLowerCase() === email.toLowerCase())) throw new Error('Email này đã có tài khoản.');
+      async createTeacher({ email, password, name, phone, rateMain, rateAssistant, role = 'teacher' }) {
+        email = U.loginId(email);
+        if (Object.values(store.users).some((u) => u.email.toLowerCase() === email)) throw new Error('Tên đăng nhập này đã có tài khoản, hãy chọn tên khác.');
         const uid = 'u_' + U.uid();
-        store.users[uid] = { name, email, phone, role: 'teacher', active: true, password, rateMain, rateAssistant };
+        store.users[uid] = { name, email, phone, role, active: true, password, rateMain: rateMain || 0, rateAssistant: rateAssistant || 0 };
         persist();
         return uid;
+      },
+      async changePassword(oldPw, newPw) {
+        const uid = sessionStorage.getItem(SKEY), u = store.users[uid];
+        if (!u || u.password !== oldPw) throw new Error('Mật khẩu hiện tại không đúng.');
+        u.password = newPw; persist();
       },
     };
   })();
@@ -195,7 +202,14 @@
           } catch (e) { cb({ error: 'noprofile', uid: u.uid, email: u.email, detail: e.message }); }
         });
       },
-      async login(email, pw) { try { await auth.signInWithEmailAndPassword(email.trim(), pw); } catch (e) { throw authMsg(e); } },
+      async login(email, pw) { try { await auth.signInWithEmailAndPassword(U.loginId(email), pw); } catch (e) { throw authMsg(e); } },
+      async changePassword(oldPw, newPw) {
+        try {
+          const u = auth.currentUser;
+          await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email, oldPw));
+          await u.updatePassword(newPw);
+        } catch (e) { throw /wrong-password|invalid-credential/.test(e.code || '') ? new Error('Mật khẩu hiện tại không đúng.') : authMsg(e); }
+      },
       async logout() { await auth.signOut(); },
       async resetPassword(email) { try { await auth.sendPasswordResetEmail(email); } catch (e) { throw authMsg(e); } },
       async list(col, wheres = []) {
@@ -222,12 +236,13 @@
         }
       },
       /* Tạo tài khoản bằng app phụ để quản trị viên không bị đăng xuất */
-      async createTeacher({ email, password, name, phone, rateMain, rateAssistant }) {
+      async createTeacher({ email, password, name, phone, rateMain, rateAssistant, role = 'teacher' }) {
         const sec = firebase.apps.find((a) => a.name === 'sec') || firebase.initializeApp(cfg, 'sec');
+        email = U.loginId(email);
         try {
-          const cred = await sec.auth().createUserWithEmailAndPassword(email.trim(), password);
+          const cred = await sec.auth().createUserWithEmailAndPassword(email, password);
           await sec.auth().signOut();
-          await fs.collection('users').doc(cred.user.uid).set({ name, email: email.trim(), phone, role: 'teacher', active: true, rateMain: rateMain || 0, rateAssistant: rateAssistant || 0, createdAt: new Date().toISOString() });
+          await fs.collection('users').doc(cred.user.uid).set({ name, email, phone, role, active: true, rateMain: rateMain || 0, rateAssistant: rateAssistant || 0, createdAt: new Date().toISOString() });
           return cred.user.uid;
         } catch (e) { throw authMsg(e); }
       },
@@ -243,7 +258,7 @@
     if (cfg && cfg.apiKey) { DB.mode = 'firebase'; impl = Fb; } else { DB.mode = 'demo'; impl = Demo; }
     await impl.init(cfg);
   };
-  ['onAuth', 'login', 'logout', 'resetPassword', 'list', 'get', 'save', 'del', 'updateMany', 'createTeacher'].forEach((k) => {
+  ['onAuth', 'login', 'logout', 'resetPassword', 'changePassword', 'list', 'get', 'save', 'del', 'updateMany', 'createTeacher'].forEach((k) => {
     DB[k] = (...a) => impl[k](...a);
   });
   DB.resetDemo = () => Demo.reset();

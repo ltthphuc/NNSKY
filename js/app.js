@@ -95,7 +95,7 @@
       <div class="login-form"><form class="login-box" id="lf">
         <div class="logo" style="margin-bottom:18px">S</div><h1>Đăng nhập</h1><p class="muted" style="margin:0">Dành cho quản trị viên và giáo viên của trung tâm.</p>
         ${msg ? `<div class="alert err" style="margin-top:16px">${esc(msg)}</div>` : ''}
-        <div class="f-row"><label class="f">Email</label><input class="input" type="email" id="em" required autocomplete="username" placeholder="ten@email.com"></div>
+        <div class="f-row"><label class="f">Tên đăng nhập hoặc email</label><input class="input" type="text" id="em" required autocomplete="username" autocapitalize="none" placeholder="tên đăng nhập"></div>
         <div class="f-row"><label class="f">Mật khẩu</label><input class="input" type="password" id="pw" required autocomplete="current-password" placeholder="••••••••"></div>
         <button class="btn lg" style="width:100%;justify-content:center;margin-top:22px" id="go">Đăng nhập</button>
         ${demo ? `<div class="demo-accounts"><b class="small">Chế độ dùng thử</b><div class="small muted">Bấm để điền nhanh tài khoản mẫu:</div>
@@ -133,15 +133,25 @@
         ${DB.mode === 'demo' ? `<div class="demo-bar">${icon('info', 14)} <b>Chế độ dùng thử:</b> dữ liệu mẫu lưu trên trình duyệt này, chưa kết nối Firebase.</div>` : ''}
         <header class="topbar"><button class="icon-btn menu-btn" id="menu">${icon('menu', 22)}</button><div class="title" id="page-title"></div><div class="grow"></div>
           <div class="user-chip"><div class="meta"><b>${esc(App.me.name)}</b><span>${admin ? 'Quản trị viên' : 'Giáo viên'}</span></div><div class="avatar">${esc(U.initials(App.me.name))}</div>
-          <button class="icon-btn" id="pwd" title="Đổi mật khẩu (gửi email)">${icon('key')}</button><button class="icon-btn" id="out" title="Đăng xuất">${icon('logout')}</button></div></header>
+          <button class="icon-btn" id="pwd" title="Đổi mật khẩu">${icon('key')}</button><button class="icon-btn" id="out" title="Đăng xuất">${icon('logout')}</button></div></header>
         <main class="content" id="view"></main></div></div>`;
     document.getElementById('menu').onclick = () => document.body.classList.toggle('nav-open');
     document.body.addEventListener('click', (e) => { if (document.body.classList.contains('nav-open') && !e.target.closest('.sidebar') && !e.target.closest('#menu')) document.body.classList.remove('nav-open'); });
     document.getElementById('out').onclick = () => DB.logout();
-    document.getElementById('pwd').onclick = async () => {
-      if (!(await U.confirm(`Gửi email đặt lại mật khẩu tới <b>${esc(App.me.email)}</b>?`, 'Gửi email', false))) return;
-      try { await DB.resetPassword(App.me.email); U.toast('Đã gửi email đặt lại mật khẩu', 'ok'); } catch (e) { U.toast(e.message, 'err'); }
-    };
+    document.getElementById('pwd').onclick = () => U.modal({
+      title: 'Đổi mật khẩu', okText: 'Đổi mật khẩu',
+      body: `<div class="form-grid"><div class="full"><label class="f">Mật khẩu hiện tại</label><input class="input" type="password" id="op" autocomplete="current-password"></div>
+        <div><label class="f">Mật khẩu mới (tối thiểu 6 ký tự)</label><input class="input" type="password" id="np" autocomplete="new-password"></div>
+        <div><label class="f">Nhập lại mật khẩu mới</label><input class="input" type="password" id="np2" autocomplete="new-password"></div></div>`,
+      onOk: async (w) => {
+        const op = w.querySelector('#op').value, np = w.querySelector('#np').value;
+        if (!op) throw new Error('Nhập mật khẩu hiện tại.');
+        if (np.length < 6) throw new Error('Mật khẩu mới tối thiểu 6 ký tự.');
+        if (np !== w.querySelector('#np2').value) throw new Error('Hai lần nhập mật khẩu mới chưa giống nhau.');
+        await DB.changePassword(op, np);
+        U.toast('Đã đổi mật khẩu', 'ok');
+      },
+    });
   }
 
   /* ---------- bảng trên điện thoại: tự gắn nhãn cột để hiển thị dạng thẻ ---------- */

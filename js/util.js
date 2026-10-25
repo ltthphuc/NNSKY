@@ -365,6 +365,13 @@
     } finally { f.remove(); }
   };
 
+  /* Tên đăng nhập: không bắt buộc là email. Tên không có @ được quy đổi thành email nội bộ để dùng với Firebase Auth. */
+  U.AUTH_DOMAIN = 'sky.local';
+  U.loginId = (s) => { s = String(s || '').trim().toLowerCase(); return s.includes('@') ? s : s + '@' + U.AUTH_DOMAIN; };
+  U.userName = (email) => String(email || '').replace(/@sky\.local$/i, '');
+  U.isPseudoEmail = (email) => /@sky\.local$/i.test(String(email || ''));
+  U.validLogin = (s) => { s = String(s || '').trim(); return /^[A-Za-z0-9._-]{3,30}$/.test(s) || /^\S+@\S+\.\S+$/.test(s); };
+
   U.printHTML = (html) => {
     const f = document.createElement('iframe');
     f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';

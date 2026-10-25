@@ -1195,38 +1195,65 @@
    * =================================================================== */
   Views.teachers = async (root, params = {}) => {
     const list = App.teachers;
-    root.innerHTML = `${head('Giáo viên', 'Tạo tài khoản giáo viên, mở hồ sơ để phân công lớp (dạy chính / trợ giảng) và điểm danh nhanh theo ngày, theo tuần.', `<button class="btn" id="add">${icon('plus')} Thêm giáo viên</button>`)}
-      <div class="card"><div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th>Giáo viên</th><th>Email đăng nhập</th><th>Số điện thoại</th><th>Lớp phụ trách</th><th class="right">Đơn giá/tiết</th><th>Trạng thái</th><th></th></tr></thead><tbody>
-      ${list.map((t) => `<tr><td class="name"><div class="row" style="flex-wrap:nowrap"><div class="avatar">${esc(U.initials(t.name))}</div><a href="#/staff/${t.id}">${esc(t.name)}</a></div></td><td>${esc(t.email)}</td><td class="mono">${esc(t.phone || '')}</td>
+    const admins = DB.isAdmin() ? (await DB.list('users', [['role', '==', 'admin']])).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi')) : [];
+    root.innerHTML = `${head('Giáo viên & tài khoản', 'Tạo tài khoản giáo viên hoặc tài khoản quản trị (admin), mở hồ sơ giáo viên để phân công lớp và điểm danh nhanh. Tên đăng nhập không bắt buộc là email.', `<button class="btn" id="add">${icon('plus')} Thêm tài khoản</button>`)}
+      <div class="card"><div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th>Giáo viên</th><th>Tên đăng nhập</th><th>Số điện thoại</th><th>Lớp phụ trách</th><th class="right">Đơn giá/tiết</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${list.map((t) => `<tr><td class="name"><div class="row" style="flex-wrap:nowrap"><div class="avatar">${esc(U.initials(t.name))}</div><a href="#/staff/${t.id}">${esc(t.name)}</a></div></td><td>${esc(U.userName(t.email))}</td><td class="mono">${esc(t.phone || '')}</td>
         <td>${App.classes.filter((c) => U.classTeachers(c).includes(t.id)).map((c) => `<span class="badge ${c.teacherId === t.id ? 'blue' : ''}" title="${U.roleName(U.roleOf(c, t.id))}">${esc(c.name)}${c.teacherId === t.id ? '' : ' (TG)'}</span>`).join(' ') || '<span class="muted">Chưa có</span>'}</td>
         <td class="right small mono">Chính: ${money(t.rateMain)}<br>Trợ giảng: ${money(t.rateAssistant)}</td>
         <td>${t.active === false ? '<span class="badge err">Đã khóa</span>' : '<span class="badge ok">Hoạt động</span>'}</td>
         <td class="nowrap right"><a class="btn sm soft" href="#/staff/${t.id}">${icon('classes', 15)} Phân công & chấm công</a> <button class="icon-btn" data-edit="${t.id}" title="Sửa">${icon('edit')}</button><button class="icon-btn" data-reset="${t.id}" title="Gửi email đặt lại mật khẩu">${icon('key')}</button></td></tr>`).join('')}
-      </tbody></table>` : empty('teachers', 'Chưa có giáo viên', 'Bấm "Thêm giáo viên" để tạo tài khoản.')}</div></div>`;
+      </tbody></table>` : empty('teachers', 'Chưa có giáo viên', 'Bấm "Thêm tài khoản" để tạo tài khoản giáo viên.')}</div></div>
+      <div class="card mt"><div class="card-h"><h3>Tài khoản quản trị (admin)</h3><span class="small muted">Có quyền quản lý như tài khoản quản trị: lớp, học sinh, học phí, lương, báo cáo, tài khoản</span></div><div class="table-wrap"><table class="t"><thead><tr><th>Họ tên</th><th>Tên đăng nhập</th><th>Số điện thoại</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${admins.map((a) => `<tr><td class="name"><div class="row" style="flex-wrap:nowrap"><div class="avatar">${esc(U.initials(a.name))}</div><b>${esc(a.name)}</b>${a.id === App.me.uid ? ' <span class="badge blue">Bạn</span>' : ''}</div></td><td>${esc(U.userName(a.email))}</td><td class="mono">${esc(a.phone || '')}</td>
+        <td>${a.active === false ? '<span class="badge err">Đã khóa</span>' : '<span class="badge ok">Hoạt động</span>'}</td><td class="nowrap right"><button class="icon-btn" data-editadm="${a.id}" title="Sửa">${icon('edit')}</button></td></tr>`).join('')}
+      </tbody></table></div></div>`;
 
     const form = (t) => `<div class="form-grid"><div class="full"><label class="f">Họ và tên *</label><input class="input" id="n" value="${esc(t ? t.name : '')}"></div>
-      <div><label class="f">Email đăng nhập *</label><input class="input" type="email" id="e" value="${esc(t ? t.email : '')}" ${t ? 'disabled' : ''}></div>
+      ${t ? '' : `<div class="full"><label class="f">Loại tài khoản</label><select class="select" id="role"><option value="teacher">Giáo viên</option><option value="admin">Quản trị (admin): quyền quản lý như tài khoản quản trị</option></select></div>`}
+      <div><label class="f">Tên đăng nhập *</label><input class="input" id="e" value="${esc(t ? U.userName(t.email) : '')}" ${t ? 'disabled' : ''} autocapitalize="none" placeholder="ví dụ: ngoc.nguyen">${t ? '' : '<div class="hint">3-30 ký tự: chữ không dấu, số, dấu . _ - (hoặc nhập email). Không được trùng tên đã có.</div>'}</div>
       <div><label class="f">Số điện thoại</label><input class="input" id="p" value="${esc(t ? t.phone || '' : '')}"></div>
-      <div><label class="f">Đơn giá mỗi tiết - giáo viên chính (đ)</label><input class="input" type="number" min="0" step="1000" id="rm" value="${esc(t ? t.rateMain || 0 : 100000)}"></div>
-      <div><label class="f">Đơn giá mỗi tiết - trợ giảng (đ)</label><input class="input" type="number" min="0" step="1000" id="ra" value="${esc(t ? t.rateAssistant || 0 : 60000)}"></div>
+      <div class="trate"><label class="f">Đơn giá mỗi tiết - giáo viên chính (đ)</label><input class="input" type="number" min="0" step="1000" id="rm" value="${esc(t ? t.rateMain || 0 : 100000)}"></div>
+      <div class="trate"><label class="f">Đơn giá mỗi tiết - trợ giảng (đ)</label><input class="input" type="number" min="0" step="1000" id="ra" value="${esc(t ? t.rateAssistant || 0 : 60000)}"></div>
       ${t ? `<div class="full"><label class="f">Trạng thái</label><select class="select" id="a"><option value="1">Hoạt động</option><option value="0" ${t.active === false ? 'selected' : ''}>Khóa tài khoản</option></select></div>`
-        : '<div class="full"><label class="f">Mật khẩu ban đầu * (tối thiểu 6 ký tự)</label><input class="input" id="pw" type="text" autocomplete="off"><div class="hint">Giáo viên có thể tự đổi mật khẩu sau khi đăng nhập.</div></div>'}</div>`;
-    const addTeacher = () => U.modal({
-      title: 'Thêm giáo viên', okText: 'Tạo tài khoản', body: form(null),
-      onOk: async (w) => {
-        const v = (id) => w.querySelector('#' + id).value.trim();
-        if (!v('n') || !v('e')) throw new Error('Nhập họ tên và email.');
-        if (!/^\S+@\S+\.\S+$/.test(v('e'))) throw new Error('Email không hợp lệ.');
-        if (v('pw').length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự.');
-        await DB.createTeacher({ email: v('e'), password: v('pw'), name: v('n'), phone: v('p'), rateMain: Number(v('rm')) || 0, rateAssistant: Number(v('ra')) || 0 });
-        U.toast('Đã tạo tài khoản giáo viên', 'ok');
-        await App.refreshTeachers(); App.render();
-      },
-    });
+        : '<div class="full"><label class="f">Mật khẩu ban đầu * (tối thiểu 6 ký tự)</label><input class="input" id="pw" type="text" autocomplete="off"><div class="hint">Người dùng tự đổi mật khẩu bằng nút chìa khóa ở góc trên bên phải sau khi đăng nhập.</div></div>'}</div>`;
+    const addTeacher = () => {
+      const m = U.modal({
+        title: 'Thêm tài khoản', okText: 'Tạo tài khoản', body: form(null),
+        onOk: async (w) => {
+          const v = (id) => w.querySelector('#' + id).value.trim();
+          const role = w.querySelector('#role').value;
+          if (!v('n') || !v('e')) throw new Error('Nhập họ tên và tên đăng nhập.');
+          if (!U.validLogin(v('e'))) throw new Error('Tên đăng nhập gồm 3-30 ký tự: chữ không dấu, số, dấu . _ - (hoặc là một email).');
+          if (v('pw').length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự.');
+          await DB.createTeacher({ email: v('e'), password: v('pw'), name: v('n'), phone: v('p'), role, rateMain: role === 'teacher' ? Number(v('rm')) || 0 : 0, rateAssistant: role === 'teacher' ? Number(v('ra')) || 0 : 0 });
+          U.toast(role === 'admin' ? 'Đã tạo tài khoản quản trị (admin)' : 'Đã tạo tài khoản giáo viên', 'ok');
+          await App.refreshTeachers(); App.render();
+        },
+      });
+      const sync = () => m.el.querySelectorAll('.trate').forEach((x) => { x.style.display = m.el.querySelector('#role').value === 'teacher' ? '' : 'none'; });
+      m.el.querySelector('#role').onchange = sync;
+    };
     root.querySelector('#add').onclick = addTeacher;
     if (params.new) addTeacher();
     root.onclick = async (e) => {
-      const ed = e.target.closest('[data-edit]'), rs = e.target.closest('[data-reset]');
+      const ed = e.target.closest('[data-edit]'), rs = e.target.closest('[data-reset]'), ea = e.target.closest('[data-editadm]');
+      if (ea) {
+        const a = admins.find((x) => x.id === ea.dataset.editadm), me = a.id === App.me.uid;
+        U.modal({
+          title: 'Sửa tài khoản quản trị', body: `<div class="form-grid"><div class="full"><label class="f">Họ và tên *</label><input class="input" id="n" value="${esc(a.name)}"></div>
+            <div><label class="f">Tên đăng nhập</label><input class="input" value="${esc(U.userName(a.email))}" disabled></div>
+            <div><label class="f">Số điện thoại</label><input class="input" id="p" value="${esc(a.phone || '')}"></div>
+            <div class="full"><label class="f">Trạng thái</label><select class="select" id="a" ${me ? 'disabled' : ''}><option value="1">Hoạt động</option><option value="0" ${a.active === false ? 'selected' : ''}>Khóa tài khoản</option></select>${me ? '<div class="hint">Bạn không thể tự khóa tài khoản đang đăng nhập.</div>' : ''}</div></div>`,
+          onOk: async (w) => {
+            const name = w.querySelector('#n').value.trim();
+            if (!name) throw new Error('Nhập họ tên.');
+            await DB.save('users', a.id, { name, phone: w.querySelector('#p').value.trim(), active: me ? true : w.querySelector('#a').value === '1' });
+            U.toast('Đã lưu', 'ok'); App.render();
+          },
+        });
+        return;
+      }
       if (ed) {
         const t = list.find((x) => x.id === ed.dataset.edit);
         U.modal({
@@ -1241,6 +1268,7 @@
       }
       if (rs) {
         const t = list.find((x) => x.id === rs.dataset.reset);
+        if (U.isPseudoEmail(t.email)) { U.toast('Tài khoản này đăng nhập bằng tên đăng nhập, không có email để gửi thư. Hãy cho giáo viên mật khẩu mới bằng cách tạo lại tài khoản hoặc nhờ họ tự đổi mật khẩu.', 'err'); return; }
         try { await DB.resetPassword(t.email); U.toast(`Đã gửi email đặt lại mật khẩu tới ${t.email}`, 'ok'); } catch (er) { U.toast(er.message, 'err'); }
       }
     };
@@ -1409,7 +1437,7 @@
     };
     const render = () => {
       root.innerHTML = `<div class="page-head"><div>${admin ? `<a href="#/staff" class="small">${icon('back', 14)} Danh sách giáo viên</a>` : ''}
-          <h1 style="margin-top:6px">${esc(teacher.name)}</h1><p>${esc(teacher.email || '')}${teacher.phone ? ' · ' + esc(teacher.phone) : ''}</p></div></div>
+          <h1 style="margin-top:6px">${esc(teacher.name)}</h1><p>${esc(U.userName(teacher.email))}${teacher.phone ? ' · ' + esc(teacher.phone) : ''}</p></div></div>
         ${classesTable()}${quickCard()}${paySummary()}`;
       counts();
     };

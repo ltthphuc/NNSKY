@@ -79,3 +79,8 @@ firestore.rules     quy tắc bảo mật Firestore
 
 ## Bài đánh giá có cột phụ
 Khi tạo bài đánh giá có thể chọn "Một điểm duy nhất" hoặc "Nhiều thành phần" (Nghe, Nói, Đọc, Viết, Từ vựng, Ngữ pháp hoặc cột tự thêm). Điểm chung tự tính bằng trung bình các cột hoặc tự nhập. Chọn riêng cho từng bài, sửa được trong trang nhập điểm (nút Thành phần điểm); file mẫu và file xuất Excel có thêm các cột phụ.
+
+## Tài khoản
+- Quản trị (admin) tạo thêm tài khoản **admin** (quyền quản lý như tài khoản quản trị) hoặc giáo viên trong mục Giáo viên → Thêm tài khoản.
+- Đăng nhập bằng **tên đăng nhập** (chữ không dấu, số, . _ -) hoặc email; tên đăng nhập được quy đổi nội bộ thành `tên@sky.local` để dùng với Firebase Authentication, không có thư thật.
+- Đổi mật khẩu: nút chìa khóa góc trên bên phải (nhập mật khẩu hiện tại và mật khẩu mới).

@@ -234,7 +234,7 @@ table.sg td{vertical-align:top;font-size:12pt}
       const rows = tids.map((id, i) => {
         const t = App.teachers.find((x) => x.id === id) || { name: tName(id) };
         const mine = sc.filter((c) => U.classTeachers(c).includes(id));
-        return [i + 1, t.name, t.email || '', t.phone || '', mine.filter((c) => c.teacherId === id).map((c) => c.name).join(', '), mine.filter((c) => c.assistantId === id).map((c) => c.name).join(', '), mine.length, '', '', ''];
+        return [i + 1, t.name, U.userName(t.email), t.phone || '', mine.filter((c) => c.teacherId === id).map((c) => c.name).join(', '), mine.filter((c) => c.assistantId === id).map((c) => c.name).join(', '), mine.length, '', '', ''];
       });
       specs.push({
         name: 'Danh sách giáo viên', title: 'DANH SÁCH GIÁO VIÊN VÀ PHÂN CÔNG GIẢNG DẠY', info: [...info, 'Các cột màu vàng (trình độ, chứng chỉ, hợp đồng) điền thêm bằng tay hoặc trong Excel.'],

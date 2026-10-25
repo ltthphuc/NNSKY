@@ -682,7 +682,7 @@
         <div class="band"><div class="cn">${esc(settings.centerName)}</div><h3>${title}</h3></div>
         ${bao ? `<div class="hi">Kính gửi Quý phụ huynh của em <b>${nm}</b>,<br>Trung tâm xin thông báo học phí như sau:</div>` : ''}
         <div class="who">${bao ? '' : `Học sinh: <b>${nm}</b> · `}Lớp: <b>${cn}</b>${!g.blank && o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>
-        <table class="m"><thead><tr><th>Tháng</th><th>Có mặt / Vắng</th><th>Học phí</th><th>Trừ</th><th>Phải đóng</th><th>Tình trạng</th></tr></thead><tbody>
+        <table class="m"><thead><tr><th>Tháng</th><th>Số buổi đi học / vắng</th><th>Học phí</th><th>Trừ</th><th>Phải đóng</th><th>Tình trạng</th></tr></thead><tbody>
         ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}</td><td class="c">${g.blank ? '…… / ……' : r.present + ' / ' + r.absent}</td><td class="r">${money(r.base)}</td><td class="r">${r.deduct ? '-' + money(r.deduct) : '0'}</td><td class="r"><b>${money(r.total)}</b></td><td class="c"><span class="${r.paid ? 'ok' : 'no'}">${r.paid ? 'Đã đóng' : 'Chưa đóng'}</span></td></tr>`).join('')}</tbody></table>
         <div class="tot"><span>${multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG'}</span><b>${money(tot)}</b></div>${multi && owe !== tot ? `<div class="tot owe"><span>CÒN PHẢI ĐÓNG</span><b>${money(owe)}</b></div>` : ''}
         <p class="sm">${esc(U.feeRuleText(g.cls, settings))}${notes.length ? '<br>' + notes.map(esc).join('<br>') : ''}</p>
@@ -909,9 +909,8 @@
           <div><label class="f">Tháng thu học phí</label><input class="input" type="month" id="gmonth" value="${st.month}"></div>
           <div><label class="f">Số phiếu trên một tờ A4</label><select class="select" id="gper"><option value="4">4 phiếu</option><option value="6">6 phiếu</option><option value="8" selected>8 phiếu</option><option value="2">2 phiếu</option><option value="1">1 phiếu</option></select></div>
           <div class="full"><div class="alert" id="gsum">Đang tính...</div></div>
-          <div class="full"><label class="ck"><input type="checkbox" id="gcommon" checked> <span><b>Phiếu chung 400.000 đ</b> (không ghi tên, viết tay) cho nhóm 1</span></label>
-            <label class="f" style="margin-top:6px">Số phiếu chung cần in <input class="input" type="number" min="0" id="gqty" style="width:100px;display:inline-block;margin-left:8px"></label></div>
-          <div class="full"><label class="ck"><input type="checkbox" id="gown" checked> <span><b>Phiếu riêng</b> ghi tên cho nhóm 2 (số tiền khác 400.000 đ: học chưa đủ số buổi hoặc chưa đóng tháng trước)</span></label></div>
+          <div class="full"><label class="ck"><input type="checkbox" id="gcommon" checked> <span><b>1 phiếu chung 400.000 đ</b> không ghi tên, để photo gửi cho tất cả học sinh nhóm 1 (đóng đủ)</span></label></div>
+          <div class="full"><label class="ck"><input type="checkbox" id="gown" checked> <span><b>Phiếu riêng</b> cho từng học sinh nhóm 2 (số tiền khác 400.000 đ): ghi tên, số buổi đi học và số tiền phải đóng</span></label></div>
           <div><label class="f">Tiêu đề phiếu</label><select class="select" id="gkind"><option value="thu">Phiếu thu học phí</option><option value="bao">Phiếu báo học phí (gửi về nhà)</option></select></div>
           <div><label class="f">Tùy chọn</label><label class="ck"><input type="checkbox" id="gchibi" checked> Hình chibi trang trí</label><label class="ck"><input type="checkbox" id="gcode"> Ghi mã lớp</label><label class="ck"><input type="checkbox" id="gdate"> Ghi ngày in trên phiếu</label></div>
         </div>
@@ -922,10 +921,9 @@
           const month = w.querySelector('#gmonth').value;
           const o = { per: Number(w.querySelector('#gper').value), kind: w.querySelector('#gkind').value, chibi: w.querySelector('#gchibi').checked, printDate: w.querySelector('#gdate').checked, showCode: w.querySelector('#gcode').checked };
           const out = [];
-          const qty = Math.max(0, Math.floor(Number(w.querySelector('#gqty').value) || 0));
-          if (w.querySelector('#gcommon').checked && qty) {
+          if (w.querySelector('#gcommon').checked) {
             const base = { ...(cl.find((c) => U.sessions(c, ...U.monthRange(month)).length) || cl[0]), name: '', code: '', fee: 400000 };
-            for (let i = 0; i < qty; i++) out.push({ blank: true, student: { name: '' }, cls: base, items: [{ month, present: '', absent: '', base: 400000, deduct: 0, total: 400000, paid: false }] });
+            out.push({ blank: true, student: { name: '' }, cls: base, items: [{ month, present: '', absent: '', base: 400000, deduct: 0, total: 400000, paid: false }] });
           }
           if (w.querySelector('#gown').checked) G.g2.forEach((g) => out.push(g));
           if (!out.length) throw new Error('Không có phiếu nào để in.');
@@ -938,7 +936,6 @@
         G = await buildGroups(q('#gmonth').value || st.month, cl);
         const s1 = G.g1.length, s2 = G.g2.reduce((a, g) => a + g.due, 0);
         q('#gsum').innerHTML = `Các lớp đang học trong tháng: <b>${G.classes}</b>. <b>Nhóm 1</b> (đóng đủ ${money(400000)}): <b>${s1}</b> học sinh · <b>Nhóm 2</b> (số tiền khác): <b>${G.g2.length}</b> học sinh, tổng ${money(s2)}.`;
-        q('#gqty').value = s1;
       };
       q('#gmonth').onchange = calc; calc();
       m.el.addEventListener('click', async (e) => {

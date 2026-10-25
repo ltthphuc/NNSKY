@@ -80,6 +80,12 @@
   U.roleOf = (cls, teacherId) => (cls.teacherId === teacherId ? 'main' : 'assistant');
   U.roleName = (r) => (r === 'main' ? 'Giáo viên chính' : 'Trợ giảng');
 
+  /* Ngày giáo viên bắt đầu dạy lớp: lớn nhất của ngày bắt đầu làm việc, ngày được phân công vào lớp và ngày khai giảng */
+  U.teachFrom = (cls, tid, teachers) => {
+    const t = (teachers || (window.App && App.teachers) || []).find((x) => x.id === tid) || {};
+    return [t.workStart, cls.teacherId === tid ? cls.teacherFrom : cls.assistantFrom, cls.startDate].filter(Boolean).sort().pop() || '';
+  };
+
   /* Tính công & lương giáo viên trong tháng từ bảng chấm công (teacherAttendance) */
   U.payrollRows = ({ classes, tAtt, teachers, month }) => {
     const byT = {};
@@ -89,7 +95,6 @@
     for (const cls of classes) {
       const docs = tAtt.filter((d) => d.classId === cls.id && String(d.date).slice(0, 7) === month);
       const recorded = new Set(docs.map((d) => d.date));
-      const missing = U.sessions(cls, from, to).filter((d) => d <= today && !recorded.has(d)).length;
       for (const d of docs) {
         for (const [tid, rec] of Object.entries(d.records || {})) {
           const t = teachers.find((x) => x.id === tid) || { id: tid, name: '(đã xóa)' };
@@ -110,7 +115,8 @@
         const t = teachers.find((x) => x.id === tid);
         if (!t) continue;
         const r = (byT[tid] = byT[tid] || newRow(t));
-        r.missing += missing;
+        const f2 = [from, U.teachFrom(cls, tid, teachers)].sort().pop();
+        r.missing += U.sessions(cls, f2, to).filter((d) => d <= today && !recorded.has(d)).length;
       }
     }
     return Object.values(byT).sort((a, b) => a.teacher.name.localeCompare(b.teacher.name, 'vi'));

@@ -84,3 +84,8 @@ Khi tạo bài đánh giá có thể chọn "Một điểm duy nhất" hoặc "N
 - Quản trị (admin) tạo thêm tài khoản **admin** (quyền quản lý như tài khoản quản trị) hoặc giáo viên trong mục Giáo viên → Thêm tài khoản.
 - Đăng nhập bằng **tên đăng nhập** (chữ không dấu, số, . _ -) hoặc email; tên đăng nhập được quy đổi nội bộ thành `tên@sky.local` để dùng với Firebase Authentication, không có thư thật.
 - Đổi mật khẩu: nút chìa khóa góc trên bên phải (nhập mật khẩu hiện tại và mật khẩu mới).
+
+## Giáo viên, điểm danh bù và công lương
+- Mục **Tài khoản** (quản trị): thêm, sửa, xóa tài khoản admin / giáo viên, đổi mật khẩu.
+- Mục **Giáo viên**: bấm vào tên lớp của giáo viên để xem lịch học của lớp và điểm danh cho giáo viên; nút "Điểm danh bù nhiều ngày"; ngày bắt đầu làm việc của giáo viên và ngày bắt đầu dạy từng lớp (chỉ điểm danh từ các ngày này).
+- **Công & lương GV**: chỉ tính theo số tiết đã dạy (không hiện tiền trừ), nút "Bảng điểm danh" xem giáo viên dạy những lớp nào, tiết nghỉ và tổng tiền theo tháng, học kỳ, khoảng ngày hoặc tất cả.

@@ -18,7 +18,7 @@
   App.refreshTeachers = async () => {
     App.teachers = DB.isAdmin()
       ? (await DB.list('users', [['role', '==', 'teacher']])).sort((a, b) => a.name.localeCompare(b.name, 'vi'))
-      : [{ id: App.me.uid, name: App.me.name, email: App.me.email, phone: App.me.phone, active: true, rateMain: App.me.rateMain, rateAssistant: App.me.rateAssistant }];
+      : [{ id: App.me.uid, name: App.me.name, email: App.me.email, phone: App.me.phone, active: true, workStart: App.me.workStart, rateMain: App.me.rateMain, rateAssistant: App.me.rateAssistant }];
   };
   App.renderShellTitle = () => { document.title = `${App.settings.centerName} - Quản lý`; };
 
@@ -33,6 +33,7 @@
     { name: 'payroll', label: 'Công & lương GV', icon: 'clock', admin: true },
     { name: 'assign', label: 'Phân công & đơn giá', icon: 'teachers', admin: true },
     { name: 'reports', label: 'Báo cáo & hồ sơ', icon: 'download', admin: true },
+    { name: 'accounts', label: 'Tài khoản', icon: 'key', admin: true },
     { name: 'settings', label: 'Cài đặt', icon: 'settings', admin: true },
   ];
   const navLabel = (n) => (!DB.isAdmin() && n.labelT) || n.label;

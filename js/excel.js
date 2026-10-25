@@ -393,24 +393,24 @@
     const sum = (f) => rows.reduce((s, r) => s + f(r), 0);
     addSheet(wb, {
       name: 'Tổng hợp', title: `BẢNG TỔNG HỢP TIỀN GIÁO VIÊN ${U.monthLabel(month).toUpperCase()}`,
-      info: ['Thực nhận = lương theo lịch − tiền trừ do nghỉ. Tiền trừ = số tiết nghỉ (cả buổi hoặc một số tiết) × đơn giá tiết.'],
+      info: ['Thành tiền = số tiết đã dạy × đơn giá mỗi tiết.'],
       cols: [{ h: 'STT', w: 6, align: 'center' }, { h: 'Giáo viên', w: 26, bold: true }, { h: 'Số buổi dạy', w: 11, align: 'center' }, { h: 'Nghỉ cả buổi', w: 11, align: 'center', color: red },
         { h: 'Tiết theo lịch', w: 11, align: 'center' }, { h: 'Tiết nghỉ', w: 10, align: 'center', color: red }, { h: 'Tiết đã dạy', w: 11, align: 'center', bold: true },
-        { h: 'Lương theo lịch', w: 16, fmt: MONEY }, { h: 'Trừ do nghỉ', w: 15, fmt: MONEY, color: red }, { h: 'Thực nhận', w: 16, fmt: MONEY, bold: true },
+        { h: 'Thành tiền', w: 16, fmt: MONEY, bold: true },
         { h: 'Trạng thái', w: 12, align: 'center', color: (v) => (v === 'Đã trả' ? 'FF0E7A3E' : 'FFB45309') }],
-      rows: rows.map((r, i) => [i + 1, r.teacher.name, r.sessions, r.absent, r.planned, r.off, r.periods, r.gross, r.deduct, r.amount, r.paid ? 'Đã trả' : 'Chưa trả']),
-      total: ['', 'TỔNG CỘNG', sum((r) => r.sessions), sum((r) => r.absent), sum((r) => r.planned), sum((r) => r.off), sum((r) => r.periods), sum((r) => r.gross), sum((r) => r.deduct), sum((r) => r.amount), ''],
+      rows: rows.map((r, i) => [i + 1, r.teacher.name, r.sessions, r.absent, r.planned, r.off, r.periods, r.amount, r.paid ? 'Đã trả' : 'Chưa trả']),
+      total: ['', 'TỔNG CỘNG', sum((r) => r.sessions), sum((r) => r.absent), sum((r) => r.planned), sum((r) => r.off), sum((r) => r.periods), sum((r) => r.amount), ''],
       signature: true,
     });
     const det = [];
-    rows.forEach((r) => Object.values(r.lines).forEach((l) => det.push([r.teacher.name, `${l.cls.name} (${l.cls.code})`, U.roleName(l.role), l.sessions, l.absent, l.planned, l.off, l.periods, l.rate, l.deduct, l.amount])));
+    rows.forEach((r) => Object.values(r.lines).forEach((l) => det.push([r.teacher.name, `${l.cls.name} (${l.cls.code})`, U.roleName(l.role), l.sessions, l.absent, l.planned, l.off, l.periods, l.rate, l.amount])));
     addSheet(wb, {
       name: 'Chi tiết theo lớp', title: `CHI TIẾT GIỜ DẠY THEO LỚP ${U.monthLabel(month).toUpperCase()}`,
       cols: [{ h: 'Giáo viên', w: 26, bold: true }, { h: 'Lớp', w: 30 }, { h: 'Vai trò', w: 17 }, { h: 'Số buổi dạy', w: 11, align: 'center' }, { h: 'Nghỉ cả buổi', w: 11, align: 'center', color: red },
         { h: 'Tiết theo lịch', w: 11, align: 'center' }, { h: 'Tiết nghỉ', w: 10, align: 'center', color: red }, { h: 'Tiết đã dạy', w: 11, align: 'center' },
-        { h: 'Đơn giá/tiết', w: 14, fmt: MONEY }, { h: 'Trừ do nghỉ', w: 15, fmt: MONEY, color: red }, { h: 'Thực nhận', w: 16, fmt: MONEY, bold: true }],
+        { h: 'Đơn giá/tiết', w: 14, fmt: MONEY }, { h: 'Thành tiền', w: 16, fmt: MONEY, bold: true }],
       rows: det,
-      total: ['TỔNG', '', '', det.reduce((s, r) => s + r[3], 0), det.reduce((s, r) => s + r[4], 0), det.reduce((s, r) => s + r[5], 0), det.reduce((s, r) => s + r[6], 0), det.reduce((s, r) => s + r[7], 0), '', det.reduce((s, r) => s + r[9], 0), det.reduce((s, r) => s + r[10], 0)],
+      total: ['TỔNG', '', '', det.reduce((s, r) => s + r[3], 0), det.reduce((s, r) => s + r[4], 0), det.reduce((s, r) => s + r[5], 0), det.reduce((s, r) => s + r[6], 0), det.reduce((s, r) => s + r[7], 0), '', det.reduce((s, r) => s + r[9], 0)],
     });
     await saveBook(wb, `Luong_giao_vien_${month}.xlsx`);
   });

@@ -163,6 +163,11 @@
         persist();
         return uid;
       },
+      async changeOtherPassword(email, oldPw, newPw) {
+        const u = Object.values(store.users).find((x) => x.email.toLowerCase() === String(email).toLowerCase());
+        if (!u || u.password !== oldPw) throw new Error('Mật khẩu hiện tại của tài khoản đó không đúng.');
+        u.password = newPw; persist();
+      },
       async changePassword(oldPw, newPw) {
         const uid = sessionStorage.getItem(SKEY), u = store.users[uid];
         if (!u || u.password !== oldPw) throw new Error('Mật khẩu hiện tại không đúng.');
@@ -203,6 +208,15 @@
         });
       },
       async login(email, pw) { try { await auth.signInWithEmailAndPassword(U.loginId(email), pw); } catch (e) { throw authMsg(e); } },
+      /* Đổi mật khẩu của tài khoản khác bằng app phụ (cần biết mật khẩu hiện tại của họ) */
+      async changeOtherPassword(email, oldPw, newPw) {
+        const sec = firebase.apps.find((a) => a.name === 'sec') || firebase.initializeApp(cfg, 'sec');
+        try {
+          const cred = await sec.auth().signInWithEmailAndPassword(email, oldPw);
+          await cred.user.updatePassword(newPw);
+          await sec.auth().signOut();
+        } catch (e) { try { await sec.auth().signOut(); } catch (x) { /* bỏ qua */ } throw /wrong-password|invalid-credential/.test(e.code || '') ? new Error('Mật khẩu hiện tại của tài khoản đó không đúng.') : authMsg(e); }
+      },
       async changePassword(oldPw, newPw) {
         try {
           const u = auth.currentUser;
@@ -258,7 +272,7 @@
     if (cfg && cfg.apiKey) { DB.mode = 'firebase'; impl = Fb; } else { DB.mode = 'demo'; impl = Demo; }
     await impl.init(cfg);
   };
-  ['onAuth', 'login', 'logout', 'resetPassword', 'changePassword', 'list', 'get', 'save', 'del', 'updateMany', 'createTeacher'].forEach((k) => {
+  ['onAuth', 'login', 'logout', 'resetPassword', 'changePassword', 'changeOtherPassword', 'list', 'get', 'save', 'del', 'updateMany', 'createTeacher'].forEach((k) => {
     DB[k] = (...a) => impl[k](...a);
   });
   DB.resetDemo = () => Demo.reset();

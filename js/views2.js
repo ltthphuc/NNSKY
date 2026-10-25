@@ -683,13 +683,14 @@
       const qr = o.qr !== false ? `<div class="qr"><img src="${QR_SRC}" alt=""><div class="qc">Quý PH có thể đóng HP qua tài khoản trên hoặc đóng trực tiếp</div></div>` : '';
       return `<div class="rc">${deco}<div class="in">
         <div class="band"><div class="cn">${esc(settings.centerName)}</div><h3>${title}</h3></div>
-        ${bao ? `<div class="hi">Kính gửi Quý phụ huynh${g.blank ? '' : ' của em <b>' + nm + '</b>'},<br>Trung tâm xin thông báo học phí như sau:</div>` : ''}
-        ${g.blank ? '' : `<div class="who">${bao ? '' : `Học sinh: <b>${nm}</b> · `}Lớp: <b>${cn}</b>${o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>`}
+        ${bao ? `<div class="hi">Kính gửi Quý phụ huynh${g.blank ? '' : ' em <b>' + nm + '</b> · Lớp <b>' + cn + '</b>' + (o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : '')},<br>Trung tâm xin thông báo học phí như sau:</div>`
+          : g.blank ? '' : `<div class="who">Học sinh: <b>${nm}</b> · Lớp: <b>${cn}</b>${o.showCode !== false && g.cls.code ? ' (' + esc(g.cls.code) + ')' : ''}</div>`}
         <div class="body"><div class="main"><table class="m"><thead><tr><th>Tháng</th><th>Phải đóng</th><th>Tình trạng</th></tr></thead><tbody>
         ${g.items.map((r) => `<tr><td>${U.monthLabel(r.month).replace('Tháng ', 'T')}${r.cut ? ` <small>(tính đến ${U.fmtDate(r.cut).slice(0, 5)})</small>` : ''}</td><td class="r"><b>${money(r.total)}</b></td><td class="c"><span class="${r.paid ? 'ok' : 'no'}">${r.paid ? 'Đã đóng' : 'Chưa đóng'}</span></td></tr>`).join('')}</tbody></table>
         <div class="tot"><span>${multi ? 'TỔNG CỘNG' : 'SỐ TIỀN PHẢI ĐÓNG'}</span><b>${money(tot)}</b></div>${multi && owe !== tot ? `<div class="tot owe"><span>CÒN PHẢI ĐÓNG</span><b>${money(owe)}</b></div>` : ''}
+        <div class="thx">Trân trọng cảm ơn Quý phụ huynh!</div>
         </div>${qr}</div>
-        ${bao ? `<div class="thx">Trân trọng cảm ơn Quý phụ huynh!</div><div class="sg one"><div>Trung tâm<br><i>(ký, đóng dấu)</i></div></div>`
+        ${bao ? `<div class="sg one"><div>Trung tâm<br><i>(ký, đóng dấu)</i></div></div>`
           : `<div class="sg"><div>Phụ huynh<br><i>(ký, ghi rõ họ tên)</i></div><div>Người thu tiền<br><i>(ký, ghi rõ họ tên)</i></div></div>`}
         ${o.printDate ? `<div class="pd">Ngày in: ${U.fmtDate(U.today())}</div>` : ''}</div></div>`;
     };
@@ -704,15 +705,15 @@
       .dc{position:absolute;display:block;z-index:2}.dc svg{width:100%;height:100%;display:block}
       .dc.a{left:-${sz * 0.28}px;top:-${sz * 0.34}px}.dc.b{right:-${sz * 0.28}px;top:-${sz * 0.34}px}.dc.c{left:-${sz * 0.2}px;bottom:-${sz * 0.3}px}.dc.d{right:-${sz * 0.22}px;bottom:-${sz * 0.32}px}
       .dc.e{left:${sz * 0.9}px;bottom:-${sz * 0.24}px}.dc.f{right:${sz * 0.9}px;bottom:-${sz * 0.24}px}
-      .band{background:linear-gradient(90deg,#4facfe 0%,#8a7bf0 55%,#ff8fc7 100%);color:#fff;border-radius:10px;text-align:center;padding:${per === 1 ? '10px 8px' : '3px 6px'};margin:${per === 1 ? '0 ' + sz * 0.5 + 'px 12px' : '0 ' + sz * 0.45 + 'px 5px'}}
+      .band{background:linear-gradient(90deg,#4facfe 0%,#8a7bf0 55%,#ff8fc7 100%);color:#fff;border-radius:10px;text-align:center;padding:${per === 1 ? '10px 8px' : '3px 6px'};margin:${per === 1 ? '0 ' + sz * 0.5 + 'px 8px' : '0 ' + sz * 0.45 + 'px 4px'}}
       .cn{font-size:${fs}px;font-weight:600;opacity:.95}h3{margin:1px 0 0;font-size:${fs + 3}px;letter-spacing:.4px}
-      .hi{margin:2px 0 4px;font-size:${fs}px;line-height:1.35}.who{margin:${per === 1 ? '4px 0 10px' : '2px 0 5px'};text-align:center}
+      .hi{margin:0 0 4px;font-size:${fs}px;line-height:1.35;text-align:center}.who{margin:0 0 4px;text-align:center}
       table.m{width:100%;border-collapse:separate;border-spacing:0;border-radius:8px;overflow:hidden;border:1px solid #cfe3f7}
       .m th{background:#dff0ff;color:#1b4f86;font-size:${fs - 1}px;padding:${per === 1 ? '7px 5px' : '2px 3px'}}
       .m th,.m td{text-align:center;vertical-align:middle}
       .m td{padding:${per === 1 ? '7px 5px' : '2px 3px'};border-top:1px solid #e4effa}.m tr:nth-child(even) td{background:#f7fbff}
       .m .c,.m .r{text-align:center;white-space:nowrap}
-      .body{display:flex;flex-direction:${per >= 4 ? 'row' : 'column'};gap:${per >= 4 ? 6 : 10}px;align-items:${per >= 4 ? 'center' : 'stretch'};margin-top:${per === 1 ? 6 : 0}px}
+      .body{display:flex;flex-direction:${per >= 4 ? 'row' : 'column'};gap:${per >= 4 ? 6 : 10}px;align-items:${per >= 4 ? 'center' : 'stretch'};margin-top:0}
       .main{flex:1;min-width:0}.qr{text-align:center;${per >= 4 ? 'width:' + ({ 4: 130, 6: 116, 8: 108 }[per] || 100) + 'px;flex:none' : ''}}
       .qr img{display:block;margin:0 auto;border-radius:6px;width:${per >= 4 ? '100%' : per === 1 ? '250px' : '160px'}}
       .qc{font-size:${fs - 1.5}px;font-weight:600;color:#1b4f86;margin-top:2px;line-height:1.25}
@@ -720,8 +721,8 @@
       .tot{display:flex;justify-content:center;gap:14px;align-items:center;margin-top:${per === 1 ? 10 : 4}px;padding:${per === 1 ? '9px 14px' : '3px 8px'};border-radius:10px;background:linear-gradient(90deg,#ffe58a,#ffc2de);color:#7a2250;font-size:${fs + 1}px}
       .tot b{font-size:${fs + 3}px}.tot.owe{background:linear-gradient(90deg,#ffd9b0,#ffb3b3);color:#8a1f11;margin-top:3px}
       .sm{font-size:${fs - 1.5}px;color:#5b6b85;margin:${per === 1 ? '10px 0' : '3px 0'}}
-      .thx{text-align:center;color:#c2185b;font-weight:600;margin-top:2px}
-      .sg{display:flex;justify-content:space-around;text-align:center;font-size:${fs - 1}px;margin-top:auto;height:${per === 1 ? 100 : per <= 4 ? 52 : 40}px}.sg.one{justify-content:flex-end;padding-right:12%}.pd{text-align:right;font-size:${fs - 2}px;color:#8a97ad}
+      .thx{text-align:center;color:#c2185b;font-weight:600;margin-top:${per === 1 ? 8 : 3}px}
+      .sg{display:flex;justify-content:space-around;text-align:center;font-size:${fs - 1}px;margin-top:${per <= 2 ? 'auto' : '4px'};height:${per === 1 ? 100 : per <= 4 ? 46 : 36}px}.sg.one{justify-content:flex-end;padding-right:12%}.pd{text-align:right;font-size:${fs - 2}px;color:#8a97ad}
     </style></head><body>${pages.join('')}</body></html>`;
   };
   const receiptHTML = (rows, month, settings, o = {}) => receiptsHTML(rows.map((r) => ({ student: r.student, cls: r.cls, items: [{ month, present: r.present, absent: r.absent, base: r.base, deduct: r.deduct, total: r.total, paid: r.paid, cut: r.cut }] })), { per: 1, ...o }, settings);

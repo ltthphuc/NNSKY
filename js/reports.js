@@ -81,8 +81,9 @@ table.sg td{vertical-align:top;font-size:12pt}
   };
   const mean = (a) => (a.length ? Math.round((a.reduce((p, c) => p + c, 0) / a.length) * 100) / 100 : '');
   const stat = (c, D, per) => {
-    const list = D.students.filter((s) => s.classId === c.id && s.status !== 'inactive');
-    const left = D.students.filter((s) => s.classId === c.id && s.status === 'inactive').length;
+    const joined = (s) => s.classId === c.id && (!s.startDate || s.startDate <= per.to); // đã vào học trước khi hết kỳ
+    const list = D.students.filter((s) => joined(s) && s.status !== 'inactive');
+    const left = D.students.filter((s) => joined(s) && s.status === 'inactive').length;
     const docs = D.attendance.filter((a) => a.classId === c.id && a.date >= per.from && a.date <= per.to);
     let present = 0, absent = 0;
     docs.forEach((d) => Object.values(d.records || {}).forEach((v) => { if (v === true) present++; else if (v === false) absent++; }));
@@ -141,7 +142,7 @@ table.sg td{vertical-align:top;font-size:12pt}
     const tids = [...new Set(cls.flatMap((c) => U.classTeachers(c)))];
     const fees = D.payments.filter((p) => cls.some((c) => c.id === p.classId) && p.month >= per.from.slice(0, 7) && p.month <= per.to.slice(0, 7));
     const roman = ['I', 'II', 'III', 'IV', 'V', 'VI'];
-    const rows1 = st.map((x, i) => `<tr><td class="c">${i + 1}</td><td><b>${esc(x.c.name)}</b></td><td class="c">${x.c.grade || ''}</td><td class="c">${x.s.list.length}</td><td>${esc(tName(x.c.teacherId))}${x.c.assistantId ? '<br>Trợ giảng: ' + esc(tName(x.c.assistantId)) : ''}</td><td>${slotLines(x.c).map(esc).join('<br>')}</td></tr>`).join('');
+    const rows1 = st.map((x, i) => `<tr><td class="c">${i + 1}</td><td><b>${esc(x.c.name)}</b><br><span style="font-size:10.5pt">${esc(x.c.code || '')}</span></td><td class="c">${x.c.grade || ''}</td><td class="c">${x.c.startDate ? U.fmtDate(x.c.startDate) : ''}${x.c.endDate ? '<br>- ' + U.fmtDate(x.c.endDate) : ''}</td><td class="c">${x.s.list.length}</td><td>${esc(tName(x.c.teacherId))}${x.c.assistantId ? '<br>Trợ giảng: ' + esc(tName(x.c.assistantId)) : ''}</td><td>${slotLines(x.c).map(esc).join('<br>')}</td></tr>`).join('');
     const rows2 = tids.map((id, i) => {
       const t = App.teachers.find((x) => x.id === id) || { name: tName(id) };
       const mine = cls.filter((c) => U.classTeachers(c).includes(id));
@@ -159,8 +160,8 @@ table.sg td{vertical-align:top;font-size:12pt}
       <p class="n">- Người đại diện: ${esc(g.director) || dots(20)}.</p>
       <p class="n">- Giấy phép / Quyết định cho phép hoạt động số: ${esc(g.license) || dots(20)}.</p>
       <p class="n"><b>${roman[1]}. QUY MÔ HOẠT ĐỘNG</b></p>
-      <p class="n">Hiện Trung tâm có <b>${cls.length}</b> lớp với <b>${hs}</b> học sinh đang theo học${left ? ` (đã nghỉ học: ${left} học sinh)` : ''}:</p>
-      <table class="dt"><thead><tr><th style="width:7%">STT</th><th>Lớp</th><th>Khối</th><th>Sĩ số</th><th>Giáo viên</th><th>Thời khóa biểu</th></tr></thead><tbody>${rows1}</tbody></table>
+      <p class="n">Trong kỳ báo cáo Trung tâm có <b>${cls.length}</b> lớp với <b>${hs}</b> học sinh đang theo học${left ? ` (đã nghỉ học: ${left} học sinh)` : ''}:</p>
+      <table class="dt"><thead><tr><th style="width:7%">STT</th><th>Lớp</th><th>Khối</th><th>Thời gian học</th><th>Sĩ số</th><th>Giáo viên</th><th>Thời khóa biểu</th></tr></thead><tbody>${rows1}</tbody></table>
       <p class="n"><b>${roman[2]}. ĐỘI NGŨ GIÁO VIÊN</b></p>
       <p class="n">Trung tâm có <b>${tids.length}</b> giáo viên tham gia giảng dạy:</p>
       <table class="dt"><thead><tr><th style="width:7%">STT</th><th>Họ và tên</th><th>Lớp phụ trách</th><th>Trình độ chuyên môn</th><th>Chứng chỉ</th></tr></thead><tbody>${rows2}</tbody></table>
@@ -339,9 +340,16 @@ table.sg td{vertical-align:top;font-size:12pt}
   ];
 
   Views.reports = async (root) => {
-    const classes = sortCls(App.shown());
+    const classes = sortCls(App.classes);
+    const att = classes.length ? await DB.q('attendance') : [];
+    /* khoảng thời gian lớp hoạt động: ngày khai giảng (hoặc buổi học đầu) đến ngày kết thúc (hoặc buổi học cuối với lớp đã đóng) */
+    const span = (c) => {
+      const ds = att.filter((a) => a.classId === c.id).map((a) => a.date).sort();
+      const from = c.startDate || ds[0] || '', to = c.endDate || (c.status === 'closed' ? ds[ds.length - 1] || from : '9999-12-31');
+      return { from, to };
+    };
+    const overlaps = (c, per) => { const sp = span(c); return (!sp.from || sp.from <= per.to) && sp.to >= per.from; };
     const o = { sheets: SHEETS.map((x) => x[0]), pick: classes.map((c) => c.id), basis: DEFAULT_BASIS, title: 'GIÁM ĐỐC', number: '01/QĐ-' + legal().abbr, each: false, recipient: 'Sở Giáo dục và Đào tạo', rnumber: '01/BC-' + legal().abbr, ...loadO() };
-    o.pick = o.pick.filter((id) => classes.some((c) => c.id === id));
     const g0 = legal(), today = U.today();
     if (!classes.length) { root.innerHTML = `${UI.head('Báo cáo & hồ sơ', 'Cần có ít nhất một lớp học.')}${UI.empty('classes', 'Chưa có lớp nào', 'Hãy tạo lớp trước khi lập báo cáo.')}`; return; }
     const inp = (id, label, val, ph = '') => `<div><label class="f">${label}</label><input class="input" id="${id}" value="${esc(val)}" placeholder="${esc(ph)}"></div>`;
@@ -356,9 +364,10 @@ table.sg td{vertical-align:top;font-size:12pt}
           ${inp('g_license', 'Giấy phép / Quyết định cho phép hoạt động số', g0.license, 'Số, ngày cấp, cơ quan cấp')}
           ${inp('g_city', 'Địa danh ghi trên văn bản', g0.city, 'Ví dụ: Thủ Đức')}
         </div><div class="row mt"><button class="btn" id="gsave">${icon('check')} Lưu thông tin</button></div></div></div>
-      <div class="card mt"><div class="card-h"><h3>2. Chọn lớp</h3><span class="small muted">Áp dụng cho quyết định mở lớp và hồ sơ Excel</span></div><div class="card-b"><div style="margin-bottom:10px">${App.classFilterBar()}</div>
-        <div class="row" style="margin-bottom:8px"><button class="btn sm soft" id="cp_all">Chọn tất cả</button><button class="btn sm ghost" id="cp_none">Bỏ chọn</button><span class="small muted" id="cp_n"></span></div>
-        <div class="rp-tests">${classes.map((c) => `<label class="ck"><input type="checkbox" data-cp="${c.id}" ${o.pick.includes(c.id) ? 'checked' : ''}> <b>${esc(c.name)}</b> <span class="muted small">(${esc(c.code || '')}) · ${esc(U.scheduleText(c))} · ${esc(tName(c.teacherId))}</span></label>`).join('')}</div></div></div>
+      <div class="card mt"><div class="card-h"><h3>2. Chọn lớp</h3><span class="small muted">Áp dụng cho quyết định mở lớp và hồ sơ Excel</span></div><div class="card-b">
+        <div class="row" style="margin-bottom:8px;flex-wrap:wrap"><button class="btn sm soft" id="cp_per">Chọn các lớp hoạt động trong kỳ báo cáo</button><button class="btn sm soft" id="cp_open">Chỉ lớp đang mở</button><button class="btn sm soft" id="cp_all">Chọn tất cả</button><button class="btn sm ghost" id="cp_none">Bỏ chọn</button><span class="small muted" id="cp_n"></span></div>
+        <div class="hint" style="margin-bottom:8px">Danh sách gồm mọi lớp (đang mở và đã đóng). Khi đổi kỳ báo cáo ở mục 4 hoặc 5, các lớp có hoạt động trong kỳ được tự chọn; bạn vẫn tick thêm / bỏ tick từng lớp. Báo cáo và hồ sơ chỉ lấy các lớp được tick.</div>
+        <div class="rp-tests">${classes.map((c) => `<label class="ck"><input type="checkbox" data-cp="${c.id}"> <b>${esc(c.name)}</b> ${c.status === 'closed' ? '<span class="badge">Đã đóng</span>' : '<span class="badge ok">Đang mở</span>'} <span class="muted small">(${esc(c.code || '')}) · ${c.startDate ? U.fmtDate(c.startDate) : '?'}${c.endDate ? ' - ' + U.fmtDate(c.endDate) : ''} · ${esc(U.scheduleText(c))} · ${esc(tName(c.teacherId))}</span></label>`).join('')}</div></div></div>
       <div class="card mt"><div class="card-h"><h3>3. Quyết định mở lớp</h3><span class="small muted">Chọn một lớp hoặc nhiều lớp (nhiều lớp thì ghi tên các lớp vào cùng một văn bản)</span></div><div class="card-b">
         <div class="form-grid">
           ${inp('d_number', 'Số quyết định', o.number)}
@@ -387,7 +396,13 @@ table.sg td{vertical-align:top;font-size:12pt}
     const q = (s) => root.querySelector(s);
     const picked = () => classes.filter((c) => root.querySelector(`[data-cp="${c.id}"]`).checked);
     const cnt = () => { q('#cp_n').textContent = `Đã chọn ${picked().length} / ${classes.length} lớp`; };
-    cnt();
+    const autoPick = (per) => { classes.forEach((c) => { q(`[data-cp="${c.id}"]`).checked = overlaps(c, per); }); cnt(); };
+    const perOf = (id) => { try { return U.periodGet(q(id + ' .period'), classes); } catch (e) { return null; } };
+    autoPick(perOf('#r_period') || { from: '0000-01-01', to: '9999-12-31' });
+    q('#r_period').addEventListener('change', () => { const p = perOf('#r_period'); if (p) { autoPick(p); persist(); } });
+    q('#x_period').addEventListener('change', () => { const p = perOf('#x_period'); if (p) { autoPick(p); persist(); } });
+    q('#cp_per').onclick = () => { const p = perOf('#r_period'); if (p) autoPick(p); persist(); };
+    q('#cp_open').onclick = () => { classes.forEach((c) => { q(`[data-cp="${c.id}"]`).checked = c.status !== 'closed'; }); cnt(); persist(); };
     const persist = () => saveO({
       sheets: [...root.querySelectorAll('[data-sh]:checked')].map((x) => x.dataset.sh), pick: picked().map((c) => c.id), basis: q('#d_basis').value, title: q('#d_title').value, number: q('#d_number').value,
       each: q('#d_each').checked, proposer: q('#d_proposer').value, recipient: q('#r_recipient').value, rnumber: q('#r_number').value,
@@ -415,7 +430,7 @@ table.sg td{vertical-align:top;font-size:12pt}
     q('#d_prev').onclick = run(async () => preview('Quyết định mở lớp', await decisionHtml()));
     q('#d_word').onclick = run(async () => { const h = await decisionHtml(); U.download(`Quyet_dinh_mo_lop_${U.today()}.doc`, '﻿' + asWord(h), 'application/msword'); U.toast('Đã tạo file Word', 'ok'); });
     const reportHtml = async () => {
-      const cls = sortCls(App.shown()), D = await loadAll(), per = U.periodGet(q('#r_period .period'), cls); persist();
+      const cls = sortCls(needClasses()), D = await loadAll(), per = U.periodGet(q('#r_period .period'), cls); persist();
       const op = { number: q('#r_number').value.trim() || '01/BC', date: q('#r_date').value || today, title: q('#d_title').value.trim() || 'GIÁM ĐỐC', recipient: q('#r_recipient').value.trim() || 'Sở Giáo dục và Đào tạo' };
       return wrapDoc(reportBody(gnow(), op, cls, D, per));
     };

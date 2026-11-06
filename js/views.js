@@ -284,6 +284,7 @@ window.Views = window.Views || {};
         if (data.feeMode === 'attend' && !(data.sessionRate > 0)) throw new Error('Nhập đơn giá mỗi buổi học (lớn hơn 0).');
         if (data.teacherId && data.teacherId === data.assistantId) throw new Error('Giáo viên chính và trợ giảng phải là hai người khác nhau.');
         data.teacherIds = U.classTeachers(data);
+        if (c && (c.teacherId || '') + '|' + (c.assistantId || '') !== (data.teacherId || '') + '|' + (data.assistantId || '')) await U.freezeTeacherRecs(c);
         const id = await DB.save('classes', c && c.id, data);
         if (c && U.classTeachers(c).join() !== data.teacherIds.join()) {
           // đồng bộ giáo viên cho dữ liệu của lớp (để giáo viên mới nhìn thấy)

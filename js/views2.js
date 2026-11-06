@@ -25,11 +25,11 @@
     let tDocs = [], tMarks = {};
     const teacherIds = () => U.classTeachers(cls).filter((id) => !sel || sel >= (U.teachFrom(cls, id) || ''));
     const tName = (id) => App.teacherName(id);
-    const rateOf = (id) => { const t = App.teachers.find((x) => x.id === id) || {}; return Number(U.roleOf(cls, id) === 'main' ? t.rateMain : t.rateAssistant) || 0; };
+    const teacherOf = (id) => App.teachers.find((x) => x.id === id) || {};
     const tSum = (id) => {
       const t = tMarks[id];
       const off = t.mode === 'none' ? t.planned : t.mode === 'part' ? Math.min(t.planned, Math.max(0, Number(t.off) || 0)) : 0;
-      const rate = rateOf(id);
+      const rate = Number(t.rate) || 0;
       return off ? `Nghỉ ${off}/${t.planned} tiết${rate ? ' · trừ ' + money(off * rate) : ''}` : `Dạy đủ ${t.planned} tiết`;
     };
 
@@ -64,7 +64,8 @@
         const r = td && td.records && td.records[id];
         const taught = r && r.present ? Number(r.periods) || 0 : 0;
         const mode = !r ? 'full' : !r.present ? 'none' : taught < planned ? 'part' : 'full';
-        tMarks[id] = { mode, off: mode === 'part' ? planned - taught : 0.5, note: (r && r.note) || '', planned };
+        const sn = U.snap(teacherOf(id), cls, id, sel, r);
+        tMarks[id] = { mode, off: mode === 'part' ? planned - taught : 0.5, note: (r && r.note) || '', planned, role: sn.role, rate: sn.rate, saved: !!(r && r.role) };
       });
       dirty = false;
       savedAt = doc ? `Đã lưu${doc.updatedBy ? ' bởi ' + doc.updatedBy : ''}` : 'Chưa điểm danh buổi này';
@@ -121,9 +122,11 @@
         <div class="small muted" style="margin:-6px 0 14px">${icon('info', 14)} ${esc(U.feeRuleText(cls, App.settings))}${cls.startDate ? ` · Lớp khai giảng ${U.fmtDate(cls.startDate)}, chỉ có các buổi từ ngày này` : ''} · ${ss.length} buổi ${scopeName}, đã điểm danh ${ss.filter((d) => recorded.has(d)).length}</div>
         ${cls.startDate ? '' : `<div class="alert warn" style="margin-bottom:14px">${icon('info', 14)} Lớp chưa có ngày khai giảng nên chưa chặn được các ngày trước khi mở lớp. ${DB.isAdmin() ? 'Vào Lớp học → Sửa lớp để nhập ngày khai giảng.' : 'Nhờ quản trị viên nhập ngày khai giảng.'}</div>`}
         <div class="${scope === 'all' ? 'strip-groups' : 'strip'}">${strip}</div>
-        ${sel && teacherIds().length ? `<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Điểm danh giáo viên buổi này</h3><span class="small muted">Dạy đủ, nghỉ cả buổi hoặc nghỉ một số tiết (tiền nghỉ trừ vào lương, lưu cùng nút "Lưu điểm danh")</span></div>
+        ${sel && teacherIds().length ? `<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Điểm danh giáo viên buổi này</h3><span class="small muted">Dạy đủ, nghỉ cả buổi hoặc nghỉ một số tiết (vai trò và đơn giá tiết được chốt riêng cho từng buổi, đổi sau này không ảnh hưởng buổi đã lưu)</span></div>
           ${teacherIds().map((id) => { const t = tMarks[id]; return `<div class="tday-row" data-tid="${id}">
-            <div class="grow"><b>${esc(tName(id))}</b> <span class="badge ${id === cls.teacherId ? 'blue' : ''}">${U.roleName(U.roleOf(cls, id))}</span></div>
+            <div class="grow"><b>${esc(tName(id))}</b> </div>
+            <select class="select" data-role title="Vai trò của giáo viên trong buổi này">${[['main', 'Giáo viên chính'], ['assistant', 'Trợ giảng']].map(([v, l]) => `<option value="${v}" ${v === t.role ? 'selected' : ''}>${l}</option>`).join('')}</select>
+            <label class="small muted">Đơn giá/tiết <input class="input" type="number" min="0" step="1000" data-rate value="${esc(t.rate)}" style="width:104px"></label>
             <select class="select" data-mode>${[['full', 'Dạy đủ'], ['none', 'Nghỉ cả buổi'], ['part', 'Nghỉ một số tiết']].map(([v, l]) => `<option value="${v}" ${v === t.mode ? 'selected' : ''}>${l}</option>`).join('')}</select>
             <label class="small muted ${t.mode === 'part' ? '' : 'hidden'}" data-offbox>Số tiết nghỉ <input class="input" type="number" min="0.5" max="${t.planned}" step="0.5" data-off value="${esc(t.off)}" style="width:78px"></label>
             <input class="input" data-note placeholder="Lý do nghỉ (không bắt buộc)" value="${esc(t.note)}">
@@ -191,7 +194,7 @@
               const oldT = await fresh('teacherAttendance', id, tDocs.find((x) => x.date === d));
               const tr = { ...((oldT && oldT.records) || {}) };
               const planned = Number(U.slotFor(cls, d).periods) || Number(cls.periods) || 0;
-              teacherIds().forEach((tid) => { if (mode === 'all' || !tr[tid]) tr[tid] = { present: true, periods: planned, planned, note: '' }; });
+              teacherIds().forEach((tid) => { if (mode === 'all' || !tr[tid]) tr[tid] = { present: true, periods: planned, planned, note: '', ...U.snap(teacherOf(tid), cls, tid, d, tr[tid]) }; });
               const tdata = { classId: cls.id, teacherId: cls.teacherId || '', teacherIds: U.classTeachers(cls), date: d, records: tr, updatedBy: App.me.name + ' (điểm danh nhanh)' };
               await DB.save('teacherAttendance', id, tdata, true);
               tDocs = tDocs.filter((x) => x.date !== d).concat([{ id, ...tdata }]);
@@ -260,6 +263,13 @@
         try { await DB.save('classes', cls.id, { feeMode: e.target.value }); cls.feeMode = e.target.value; U.toast('Đã đổi cách tính học phí của lớp', 'ok'); render(); } catch (er) { U.toast(er.message, 'err'); }
         return;
       }
+      if (e.target.matches('[data-role]')) {
+        const row = e.target.closest('.tday-row'), t = tMarks[row.dataset.tid];
+        t.role = e.target.value; dirty = true;
+        if (!t.rateTouched) { t.rate = U.rateAt(teacherOf(row.dataset.tid), t.role, sel); row.querySelector('[data-rate]').value = t.rate; }
+        const sm = row.querySelector('[data-sum]'); sm.textContent = tSum(row.dataset.tid);
+        return;
+      }
       if (e.target.matches('[data-mode]')) {
         const row = e.target.closest('.tday-row'), t = tMarks[row.dataset.tid];
         t.mode = e.target.value; dirty = true;
@@ -282,6 +292,7 @@
       if (!row) return;
       const t = tMarks[row.dataset.tid];
       if (e.target.matches('[data-off]')) t.off = e.target.value;
+      else if (e.target.matches('[data-rate]')) { t.rate = Math.max(0, Number(e.target.value) || 0); t.rateTouched = true; }
       else if (e.target.matches('[data-note]')) t.note = e.target.value;
       else return;
       dirty = true; updateCounts();
@@ -329,7 +340,8 @@
             const off = t.mode === 'part' ? Number(t.off) || 0 : 0;
             if (t.mode === 'part' && !(off > 0)) throw new Error(`Nhập số tiết nghỉ của ${tName(tid)} (lớn hơn 0).`);
             const none = t.mode === 'none' || (t.mode === 'part' && off >= t.planned);
-            trNew[tid] = none ? { present: false, periods: 0, planned: t.planned, note: t.note || '' } : { present: true, periods: t.planned - off, planned: t.planned, note: t.note || '' };
+            const snap = { role: t.role, rate: Math.max(0, Number(t.rate) || 0) };
+            trNew[tid] = none ? { present: false, periods: 0, planned: t.planned, note: t.note || '', ...snap } : { present: true, periods: t.planned - off, planned: t.planned, note: t.note || '', ...snap };
           }
           const old = await fresh('attendance', `${cls.id}_${sel}`, docs.find((d) => d.date === sel));
           const records = { ...((old && old.records) || {}) };
@@ -780,6 +792,116 @@
     ];
   };
 
+  /* ===================================================================
+   *  THỐNG KÊ HỌC PHÍ: theo tháng / quý / từ ngày đến ngày
+   *  Số đã đóng lấy từ phiếu thu đã lưu (giữ nguyên số tiền lúc thu); "Lưu bản chốt" ghi lại cả bảng thống kê vào cơ sở dữ liệu.
+   * =================================================================== */
+  Views.tuitionStats = async (root) => {
+    const classes = App.shown();
+    if (!classes.length && !App.classes.length) { root.innerHTML = noClass('Thống kê học phí'); return; }
+    const admin = DB.isAdmin();
+    const today = U.today();
+    const st = (App.tstatState = App.tstatState || { kind: 'month', month: today.slice(0, 7), year: +today.slice(0, 4), q: Math.floor((+today.slice(5, 7) - 1) / 3) + 1, from: today.slice(0, 7) + '-01', to: today, classId: '' });
+    let students = [], attendance = [], payments = [], snaps = [];
+    const load = async () => {
+      [students, attendance, payments] = await Promise.all([DB.q('students'), DB.q('attendance'), DB.q('payments')]);
+      snaps = admin ? (await DB.list('settings')).filter((x) => String(x.id).startsWith('tuitionSnap_')).sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt))) : [];
+    };
+    const range = () => {
+      if (st.kind === 'month') { const [from, to] = U.monthRange(st.month); return { from, to, label: U.monthLabel(st.month) }; }
+      if (st.kind === 'quarter') { const m1 = `${st.year}-${String((st.q - 1) * 3 + 1).padStart(2, '0')}`, from = U.monthRange(m1)[0], to = U.monthRange(U.addMonth(m1, 2))[1]; return { from, to, label: `Quý ${st.q} năm ${st.year}` }; }
+      if (!st.from || !st.to || st.from > st.to) throw new Error('Khoảng ngày không hợp lệ (ngày bắt đầu phải trước ngày kết thúc).');
+      return { from: st.from, to: st.to, label: `Từ ${U.fmtDate(st.from)} đến ${U.fmtDate(st.to)}` };
+    };
+    const calc = () => {
+      const per = range(), cl = classes.filter((c) => !st.classId || c.id === st.classId);
+      const months = [];
+      for (let m = per.from.slice(0, 7); m <= per.to.slice(0, 7); m = U.addMonth(m, 1)) {
+        const rows = U.tuitionRows({ classes: cl, students, attendance, payments, settings: App.settings, month: m, clip: { from: per.from, to: per.to } });
+        const due = rows.reduce((a, r) => a + r.total, 0), got = rows.filter((r) => r.paid).reduce((a, r) => a + r.total, 0);
+        months.push({ month: m, rows, n: rows.length, paidN: rows.filter((r) => r.paid).length, due, got, deduct: rows.reduce((a, r) => a + r.deduct, 0) });
+      }
+      const byClass = cl.map((c) => {
+        const rs = months.flatMap((x) => x.rows).filter((r) => r.cls.id === c.id);
+        const due = rs.reduce((a, r) => a + r.total, 0), got = rs.filter((r) => r.paid).reduce((a, r) => a + r.total, 0);
+        return { c, students: new Set(rs.map((r) => r.student.id)).size, due, got, deduct: rs.reduce((a, r) => a + r.deduct, 0) };
+      }).filter((x) => x.students);
+      const ids = new Set(cl.map((c) => c.id));
+      const collected = payments.filter((p) => p.paid && p.paidAt && ids.has(p.classId) && p.paidAt.slice(0, 10) >= per.from && p.paidAt.slice(0, 10) <= per.to).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+      const sum = (f) => months.reduce((a, x) => a + f(x), 0);
+      return { per, months, byClass, collected, due: sum((x) => x.due), got: sum((x) => x.got), deduct: sum((x) => x.deduct) };
+    };
+    const opt = (v, t, cur) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${t}</option>`;
+    const render = () => {
+      let d;
+      try { d = calc(); } catch (er) { U.toast(er.message, 'err'); st.kind = 'month'; d = calc(); }
+      const sy = +today.slice(0, 4);
+      root.innerHTML = `${head('Thống kê học phí', 'Tổng phải thu, đã thu, còn phải thu theo tháng, theo quý hoặc từ ngày đến ngày. Số đã đóng giữ nguyên theo phiếu thu đã lưu.',
+        `<button class="btn ghost" id="exp">${icon('download')} Xuất Excel</button>${admin ? `<button class="btn" id="snap">${icon('check')} Lưu bản chốt</button>` : ''}`)}
+        <div class="card toolbar">${App.classFilterBar()}
+          <select class="select" id="kind">${opt('month', 'Theo tháng', st.kind)}${opt('quarter', 'Theo quý', st.kind)}${opt('range', 'Từ ngày … đến ngày …', st.kind)}</select>
+          ${st.kind === 'month' ? `<input class="input" type="month" id="m" value="${st.month}" style="width:auto">` : ''}
+          ${st.kind === 'quarter' ? `<select class="select" id="q" style="width:auto">${[1, 2, 3, 4].map((q) => opt(q, 'Quý ' + q, st.q)).join('')}</select><select class="select" id="y" style="width:auto">${[sy + 1, sy, sy - 1, sy - 2].map((y) => opt(y, 'Năm ' + y, st.year)).join('')}</select>` : ''}
+          ${st.kind === 'range' ? `<label class="small muted">Từ ngày <input class="input" type="date" id="f" value="${st.from}" style="width:auto"></label><label class="small muted">đến ngày <input class="input" type="date" id="t" value="${st.to}" style="width:auto"></label>` : ''}
+          <select class="select" id="cls"><option value="">Tất cả lớp</option>${classes.map((c) => `<option value="${c.id}" ${st.classId === c.id ? 'selected' : ''}>${esc(c.name)} (${esc(c.code)})</option>`).join('')}</select>
+          <span class="muted grow">${icon('info', 15)} ${esc(d.per.label)}: chỉ tính các buổi nằm trong kỳ, tháng chưa trọn thì tính phần trong kỳ.</span></div>
+        <div class="stats">
+          <div class="card stat"><div class="ico">${icon('wallet', 24)}</div><div><b>${money(d.due)}</b><span>Tổng phải thu</span></div></div>
+          <div class="card stat"><div class="ico g">${icon('check', 24)}</div><div><b>${money(d.got)}</b><span>Đã thu</span></div></div>
+          <div class="card stat"><div class="ico o">${icon('clock', 24)}</div><div><b>${money(d.due - d.got)}</b><span>Còn phải thu</span></div></div>
+          <div class="card stat"><div class="ico s">${icon('attendance', 24)}</div><div><b>${money(d.collected)}</b><span>Thực thu trong kỳ (theo ngày thu)</span></div></div>
+        </div>
+        <div class="card"><div class="card-h"><h3>Theo tháng</h3></div><div class="table-wrap">${d.months.some((x) => x.n) ? `<table class="t"><thead><tr><th>Tháng</th><th class="center">Số học sinh</th><th class="center">Đã đóng</th><th class="right">Phải thu</th><th class="right">Đã thu</th><th class="right">Còn lại</th><th class="right">Giảm do vắng</th></tr></thead><tbody>
+          ${d.months.map((x) => `<tr><td class="name">${U.monthLabel(x.month)}</td><td class="center">${x.n}</td><td class="center">${x.paidN}</td><td class="right mono">${money(x.due)}</td><td class="right mono">${money(x.got)}</td><td class="right mono"><b>${money(x.due - x.got)}</b></td><td class="right mono">${x.deduct ? '-' + money(x.deduct) : '-'}</td></tr>`).join('')}
+          </tbody><tfoot><tr><td colspan="3">Tổng cộng</td><td class="right mono">${money(d.due)}</td><td class="right mono">${money(d.got)}</td><td class="right mono">${money(d.due - d.got)}</td><td class="right mono">-${money(d.deduct)}</td></tr></tfoot></table>` : empty('wallet', 'Không có dữ liệu học phí trong kỳ này', 'Chọn kỳ khác hoặc đổi bộ lọc lớp.')}</div></div>
+        ${d.byClass.length ? `<div class="card mt"><div class="card-h"><h3>Theo lớp</h3></div><div class="table-wrap"><table class="t"><thead><tr><th>Lớp</th><th class="center">Số học sinh</th><th class="right">Phải thu</th><th class="right">Đã thu</th><th class="right">Còn lại</th></tr></thead><tbody>
+          ${d.byClass.map((x) => `<tr><td class="name">${esc(x.c.name)}<div class="small muted">${esc(x.c.code)}</div></td><td class="center">${x.students}</td><td class="right mono">${money(x.due)}</td><td class="right mono">${money(x.got)}</td><td class="right mono"><b>${money(x.due - x.got)}</b></td></tr>`).join('')}</tbody></table></div></div>` : ''}
+        ${admin && snaps.length ? `<div class="card mt"><div class="card-h"><h3>Các bản chốt đã lưu</h3><span class="small muted">Số liệu được lưu lại, không đổi khi học phí hay điểm danh thay đổi sau này</span></div><div class="table-wrap"><table class="t"><thead><tr><th>Kỳ</th><th>Phạm vi</th><th class="right">Phải thu</th><th class="right">Đã thu</th><th class="right">Còn lại</th><th>Lưu lúc</th><th></th></tr></thead><tbody>
+          ${snaps.map((x) => `<tr><td class="name">${esc(x.label)}</td><td class="small">${esc(x.scope)}</td><td class="right mono">${money(x.due)}</td><td class="right mono">${money(x.got)}</td><td class="right mono">${money(x.due - x.got)}</td><td class="small">${esc(U.fmtDate(String(x.savedAt).slice(0, 10)))} · ${esc(x.savedBy || '')}</td><td class="right"><button class="icon-btn danger" data-delsnap="${x.id}" title="Xóa bản chốt">${icon('trash')}</button></td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+      root._d = d;
+    };
+    root.onchange = (e) => {
+      const id = e.target.id;
+      if (id === 'cls') st.classId = e.target.value;
+      else if (id === 'kind') st.kind = e.target.value;
+      else if (id === 'm') st.month = e.target.value || st.month;
+      else if (id === 'q') st.q = +e.target.value;
+      else if (id === 'y') st.year = +e.target.value;
+      else if (id === 'f') st.from = e.target.value;
+      else if (id === 't') st.to = e.target.value;
+      else return;
+      render();
+    };
+    root.onclick = async (e) => {
+      const d = root._d, t = e.target;
+      try {
+        if (t.closest('#exp')) {
+          const fmt = '#,##0';
+          await X.exportWorkbook([
+            { name: 'Theo tháng', title: `THỐNG KÊ HỌC PHÍ: ${d.per.label.toUpperCase()}`, info: [`${App.settings.centerName} · ${st.classId ? 'lớp đang chọn' : 'các lớp theo bộ lọc'}`],
+              cols: [{ h: 'Tháng', w: 14 }, { h: 'Số học sinh', w: 12, align: 'center' }, { h: 'Đã đóng', w: 10, align: 'center' }, { h: 'Phải thu', w: 16, fmt }, { h: 'Đã thu', w: 16, fmt }, { h: 'Còn lại', w: 16, fmt }, { h: 'Giảm do vắng', w: 16, fmt }],
+              rows: d.months.map((x) => [U.monthLabel(x.month), x.n, x.paidN, x.due, x.got, x.due - x.got, x.deduct]), total: ['Tổng cộng', '', '', d.due, d.got, d.due - d.got, d.deduct] },
+            { name: 'Theo lớp', title: `THỐNG KÊ HỌC PHÍ THEO LỚP: ${d.per.label.toUpperCase()}`, info: [],
+              cols: [{ h: 'Lớp', w: 20 }, { h: 'Mã lớp', w: 12 }, { h: 'Số học sinh', w: 12, align: 'center' }, { h: 'Phải thu', w: 16, fmt }, { h: 'Đã thu', w: 16, fmt }, { h: 'Còn lại', w: 16, fmt }],
+              rows: d.byClass.map((x) => [x.c.name, x.c.code, x.students, x.due, x.got, x.due - x.got]), total: ['Tổng cộng', '', '', d.due, d.got, d.due - d.got] },
+          ], `Thong_ke_hoc_phi_${d.per.from}_${d.per.to}.xlsx`);
+          return;
+        }
+        if (t.closest('#snap')) {
+          const id = `tuitionSnap_${d.per.from}_${d.per.to}_${st.classId || 'all'}`;
+          await DB.save('settings', id, { label: d.per.label, from: d.per.from, to: d.per.to, scope: st.classId ? (App.classById(st.classId) || {}).name || '' : 'Các lớp theo bộ lọc', due: d.due, got: d.got, deduct: d.deduct, collected: d.collected,
+            months: d.months.map((x) => ({ month: x.month, n: x.n, paidN: x.paidN, due: x.due, got: x.got, deduct: x.deduct })), classes: d.byClass.map((x) => ({ id: x.c.id, name: x.c.name, students: x.students, due: x.due, got: x.got })),
+            savedAt: new Date().toISOString(), savedBy: App.me.name }, true);
+          await load(); render(); U.toast('Đã lưu bản chốt thống kê học phí', 'ok');
+          return;
+        }
+        const del = t.closest('[data-delsnap]');
+        if (del && (await U.confirm('Xóa bản chốt này?'))) { await DB.del('settings', del.dataset.delsnap); await load(); render(); }
+      } catch (er) { U.toast(er.message, 'err'); }
+    };
+    await load(); render();
+  };
+
   Views.tuition = async (root, params) => {
     const classes = App.shown();
     if (!classes.length && !App.classes.length) { root.innerHTML = noClass('Học phí'); return; }
@@ -1081,7 +1203,6 @@
       rows.forEach((r) => { const p = payouts.find((x) => x.id === `${r.teacher.id}_${st.month}`); r.pay = p; r.paid = !!(p && p.paid); if (r.paid) r.amount = p.amount; });
       return rows;
     };
-    const rateOf = (c, tid) => { const t = App.teachers.find((x) => x.id === tid) || {}; return Number(U.roleOf(c, tid) === 'main' ? t.rateMain : t.rateAssistant) || 0; };
     const offList = () => tAtt.filter((d) => String(d.date).slice(0, 7) === st.month).flatMap((d) => {
       const c = App.classById(d.classId);
       if (!c) return [];
@@ -1089,7 +1210,7 @@
         const planned = rec.planned != null ? Number(rec.planned) : Number(U.slotFor(c, d.date).periods) || Number(c.periods) || 0;
         const off = Math.max(0, planned - (rec.present ? Number(rec.periods) || 0 : 0));
         if (d.date < U.teachFrom(c, tid) && !rec.present) return null; // chưa bắt đầu dạy: không tính nghỉ
-        return off > 0 ? { date: d.date, c, tid, planned, off, none: !rec.present, note: rec.note || '', rate: rateOf(c, tid) } : null;
+        return off > 0 ? { date: d.date, c, tid, planned, off, none: !rec.present, note: rec.note || '', rate: U.recRate(App.teachers.find((x) => x.id === tid) || {}, c, tid, rec, d.date) } : null;
       }).filter(Boolean);
     }).sort((a, b) => b.date.localeCompare(a.date));
     const render = () => {
@@ -1117,8 +1238,8 @@
           </tbody><tfoot><tr><td>Tổng cộng</td><td class="center">${rows.reduce((s, r) => s + r.days, 0)}</td><td class="center">${rows.reduce((s, r) => s + r.planned, 0)}</td><td class="center">${rows.reduce((s, r) => s + r.periods, 0)}</td><td class="center">${rows.reduce((s, r) => s + r.off, 0)}</td><td class="right mono">${money(total)}</td><td colspan="2"></td></tr></tfoot></table>` : empty('wallet', 'Chưa có dữ liệu dạy trong tháng này', 'Tiền giáo viên được tính từ điểm danh giáo viên.')}</div></div>
         ${off.length ? `<div class="card mt"><div class="card-h"><h3>Các buổi giáo viên nghỉ trong tháng</h3></div><div class="table-wrap"><table class="t"><thead><tr><th>Ngày</th><th>Lớp</th><th>Giáo viên</th><th>Loại nghỉ</th><th class="center">Tiết nghỉ</th><th>Lý do</th></tr></thead><tbody>
           ${off.map((o) => `<tr><td class="nowrap">${U.fmtDate(o.date)}</td><td><span class="badge blue">${esc(o.c.name)}</span></td><td class="name">${esc(App.teacherName(o.tid))}</td><td>${o.none ? '<span class="badge err">Nghỉ cả buổi</span>' : '<span class="badge warn">Nghỉ một số tiết</span>'}</td><td class="center">${o.off}/${o.planned}</td><td class="small">${esc(o.note)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-        ${lines.length ? `<div class="card mt"><div class="card-h"><h3>Chi tiết theo lớp</h3></div><div class="table-wrap"><table class="t"><thead><tr><th>Giáo viên</th><th>Lớp</th><th>Vai trò</th><th class="center">Số ngày đi làm</th><th class="center">Tiết theo lịch</th><th class="center">Tiết đã dạy</th><th class="center">Tiết nghỉ</th><th class="right">Thành tiền</th></tr></thead><tbody>
-          ${lines.map(({ r, l }) => `<tr><td class="name">${esc(r.teacher.name)}</td><td><span class="badge blue">${esc(l.cls.name)}</span></td><td>${U.roleName(l.role)}</td><td class="center">${l.days}</td><td class="center">${l.planned}</td><td class="center">${l.periods}</td><td class="center">${l.off ? `<b style="color:var(--err)">${l.off}</b>` : 0}</td><td class="right mono">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+        ${lines.length ? `<div class="card mt"><div class="card-h"><h3>Chi tiết theo lớp</h3></div><div class="table-wrap"><table class="t"><thead><tr><th>Giáo viên</th><th>Lớp</th><th>Vai trò</th><th class="right">Đơn giá/tiết</th><th class="center">Số ngày đi làm</th><th class="center">Tiết theo lịch</th><th class="center">Tiết đã dạy</th><th class="center">Tiết nghỉ</th><th class="right">Thành tiền</th></tr></thead><tbody>
+          ${lines.map(({ r, l }) => `<tr><td class="name">${esc(r.teacher.name)}</td><td><span class="badge blue">${esc(l.cls.name)}</span></td><td>${U.roleName(l.role)}</td><td class="right mono">${money(l.rate)}</td><td class="center">${l.days}</td><td class="center">${l.planned}</td><td class="center">${l.periods}</td><td class="center">${l.off ? `<b style="color:var(--err)">${l.off}</b>` : 0}</td><td class="right mono">${money(l.amount)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
     };
 
     /* ----- Bảng điểm danh / bảng lương của giáo viên theo kỳ -----
@@ -1127,11 +1248,10 @@
       const teacher = App.teachers.find((x) => x.id === tid);
       const own = App.classes.filter((c) => U.classTeachers(c).includes(tid) || tAtt.some((d) => d.classId === c.id && d.records && d.records[tid]));
       const hi = per.to < U.today() ? per.to : U.today();
-      const rate = (c) => Number(U.roleOf(c, tid) === 'main' ? teacher.rateMain : teacher.rateAssistant) || 0;
       const data = own.map((c) => {
         const tf = U.teachFrom(c, tid) || '';
         const cells = {}, shown = [];
-        let sess = 0, absent = 0, planned = 0, taught = 0, off = 0;
+        let sess = 0, absent = 0, planned = 0, taught = 0, off = 0, amount = 0;
         const daySet = new Set();
         U.sessions(c, per.from, hi).forEach((d) => {
           const doc = tAtt.find((x) => x.classId === c.id && x.date === d), rec = doc && doc.records && doc.records[tid];
@@ -1141,10 +1261,10 @@
           const pl = rec.planned != null ? Number(rec.planned) : Number(U.slotFor(c, d).periods) || Number(c.periods) || 0;
           const t = rec.present ? Number(rec.periods) || 0 : 0, o = Math.max(0, pl - t);
           if (rec.present) { sess++; daySet.add(d); } else absent++;
-          planned += pl; taught += t; off += o;
+          planned += pl; taught += t; off += o; amount += t * U.recRate(teacher, c, tid, rec, d);
           cells[d] = { s: !rec.present ? 'X' : o > 0 ? `${t}/${pl}` : '✓', t, o };
         });
-        return { c, dates: shown, cells, sess, absent, planned, taught, off, daySet, days: daySet.size, amount: taught * rate(c), rate: rate(c) };
+        return { c, dates: shown, cells, sess, absent, planned, taught, off, daySet, days: daySet.size, amount, rate: taught ? Math.round(amount / taught) : U.rateAt(teacher, U.roleOf(c, tid), hi) };
       }).filter((x) => x.dates.length);
       const sum = (f) => data.reduce((a, x) => a + f(x), 0);
       const allDays = new Set(); data.forEach((x) => x.daySet.forEach((d) => allDays.add(d)));
@@ -1289,7 +1409,7 @@
             const old = await fresh('teacherAttendance', id, tAtt.find((x) => x.id === id));
             const records = { ...((old && old.records) || {}) };
             const planned = Number(U.slotFor(g.c, g.d).periods) || Number(g.c.periods) || 0;
-            g.items.forEach((p) => { records[p.tid] = p.v === 'V' ? { present: false, periods: 0, planned } : { present: p.v > 0, periods: p.v, planned }; });
+            g.items.forEach((p) => { const sn = U.snap(App.teachers.find((x) => x.id === p.tid) || {}, g.c, p.tid, g.d, records[p.tid]); records[p.tid] = p.v === 'V' ? { present: false, periods: 0, planned, ...sn } : { present: p.v > 0, periods: p.v, planned, ...sn }; });
             const data = { classId: g.c.id, teacherId: g.c.teacherId || '', teacherIds: U.classTeachers(g.c), date: g.d, records, updatedBy: App.me.name + ' (nhập Excel)' };
             await DB.save('teacherAttendance', id, data, true);
             tAtt = tAtt.filter((x) => x.id !== id).concat([{ id, ...data }]);
@@ -1364,12 +1484,13 @@
             <td><select class="select" data-ta="${c.id}">${opts(c.assistantId)}</select></td>
             <td class="small">${esc(U.periodsText(c))} tiết<div class="muted">sửa trong form lớp</div></td></tr>`).join('')}
         </tbody></table>` : empty('classes', 'Chưa có lớp nào', `<a class="btn mt" href="#/classes?new=1">${icon('plus')} Thêm lớp mới</a>`)}</div></div>
-        <div class="card mt"><div class="card-h"><h3>2. Số tiền mỗi tiết giáo viên được hưởng</h3><span class="small muted">Tiền lương = số tiết đã dạy × đơn giá (xem ở mục Công & lương GV)</span></div>
-        <div class="table-wrap">${teachers.length ? `<table class="t"><thead><tr><th>Giáo viên</th><th>Lớp phụ trách</th><th>Đơn giá/tiết khi là giáo viên chính (đ)</th><th>Đơn giá/tiết khi là trợ giảng (đ)</th></tr></thead><tbody>
+        <div class="card mt"><div class="card-h"><h3>2. Số tiền mỗi tiết giáo viên được hưởng</h3><span class="small muted">Đổi đơn giá chỉ có hiệu lực từ ngày chọn; các buổi đã dạy trước đó giữ nguyên đơn giá cũ</span></div>
+        <div class="table-wrap">${teachers.length ? `<table class="t"><thead><tr><th>Giáo viên</th><th>Lớp phụ trách</th><th>Giáo viên chính (đ/tiết)</th><th>Trợ giảng (đ/tiết)</th><th>Lịch sử đơn giá</th><th></th></tr></thead><tbody>
           ${teachers.map((t) => `<tr><td class="name">${esc(t.name)}</td>
             <td>${App.classes.filter((c) => U.classTeachers(c).includes(t.id)).map((c) => `<span class="badge ${c.teacherId === t.id ? 'blue' : ''}">${esc(c.name)}${c.teacherId === t.id ? '' : ' (TG)'}</span>`).join(' ') || '<span class="muted">Chưa có</span>'}</td>
-            <td><input class="input" type="number" min="0" step="1000" style="width:170px" data-rm="${t.id}" value="${esc(t.rateMain || 0)}"></td>
-            <td><input class="input" type="number" min="0" step="1000" style="width:170px" data-ra="${t.id}" value="${esc(t.rateAssistant || 0)}"></td></tr>`).join('')}
+            <td class="mono">${money(U.rateAt(t, 'main', U.today()))}</td><td class="mono">${money(U.rateAt(t, 'assistant', U.today()))}</td>
+            <td class="small">${((t.rates || []).length ? t.rates : [{ from: '', main: t.rateMain, assistant: t.rateAssistant }]).map((e) => `${e.from ? 'Từ ' + U.fmtDate(e.from) : 'Ban đầu'}: ${money(e.main)} / ${money(e.assistant)}`).join('<br>')}</td>
+            <td class="right nowrap"><button class="btn sm soft" data-newrate="${t.id}">${icon('edit', 15)} Đổi đơn giá</button></td></tr>`).join('')}
         </tbody></table>` : empty('teachers', 'Chưa có giáo viên', `<a class="btn mt" href="#/accounts?new=teacher">${icon('plus')} Thêm giáo viên</a>`)}</div></div>`;
     };
     draw();
@@ -1385,6 +1506,7 @@
           const next = { ...c, ...patch };
           if (next.teacherId && next.teacherId === next.assistantId) { U.toast('Giáo viên chính và trợ giảng phải là hai người khác nhau.', 'err'); return draw(); }
           next.teacherIds = U.classTeachers(next);
+          if (d.main || d.ta) await U.freezeTeacherRecs(c);
           await DB.save('classes', c.id, { ...patch, teacherIds: next.teacherIds });
           if (U.classTeachers(c).join() !== next.teacherIds.join()) {
             for (const col of ['students', 'attendance', 'assessments', 'payments', 'teacherAttendance']) {
@@ -1394,14 +1516,12 @@
           }
           await App.refreshClasses();
           U.toast(`Đã lưu phân công ${c.name}`, 'ok'); draw();
-        } else if (d.rm || d.ra) {
-          const id = d.rm || d.ra;
-          const v = Math.max(0, Number(e.target.value) || 0);
-          await DB.save('users', id, d.rm ? { rateMain: v } : { rateAssistant: v });
-          await App.refreshTeachers();
-          U.toast(`Đã lưu đơn giá: ${money(v)}/tiết`, 'ok');
         }
       } catch (er) { U.toast(er.message, 'err'); draw(); }
+    };
+    root.onclick = (e) => {
+      const b = e.target.closest('[data-newrate]');
+      if (b) U.rateDialog(App.teachers.find((x) => x.id === b.dataset.newrate), async () => { await App.refreshTeachers(); draw(); });
     };
   };
 
@@ -1412,6 +1532,7 @@
   const setClassTeachers = async (c, patch) => {
     const next = { ...c, ...patch };
     next.teacherIds = U.classTeachers(next);
+    await U.freezeTeacherRecs(c);
     await DB.save('classes', c.id, { ...patch, teacherIds: next.teacherIds });
     if (U.classTeachers(c).join() !== next.teacherIds.join()) {
       for (const col of ['students', 'attendance', 'assessments', 'payments', 'teacherAttendance']) {
@@ -1541,7 +1662,7 @@
             const old = await fresh('teacherAttendance', id, tAtt.find((z) => z.id === id));
             if (!over && old && old.records && old.records[tid]) continue;
             const planned = Number(U.slotFor(c, d).periods) || Number(c.periods) || 0;
-            const records = { ...((old && old.records) || {}), [tid]: { present: true, periods: planned, planned, note: '' } };
+            const records = { ...((old && old.records) || {}), [tid]: { present: true, periods: planned, planned, note: '', ...U.snap(teacher, c, tid, d, old && old.records && old.records[tid]) } };
             const data = { classId: c.id, teacherId: c.teacherId || '', teacherIds: U.classTeachers(c), date: d, records, updatedBy: App.me.name + ' (điểm danh bù)' };
             await DB.save('teacherAttendance', id, data, true);
             tAtt = tAtt.filter((z) => z.id !== id).concat([{ id, ...data }]); n++;
@@ -1569,7 +1690,6 @@
           <div class="small muted" style="margin-top:10px">Đơn giá: ${money(teacher.rateMain)}/tiết khi dạy chính, ${money(teacher.rateAssistant)}/tiết khi trợ giảng.${admin ? ' <a href="#/payroll">Xem bảng lương tất cả giáo viên</a>' : ''}</div></div></div>`;
     };
     /* ----- Lịch dạy theo ngày / tuần / tháng / khoảng ngày + tổng hợp ngày công ----- */
-    const rateOf = (c) => Number(U.roleOf(c, tid) === 'main' ? teacher.rateMain : teacher.rateAssistant) || 0;
     const items = () => {
       const dates = period();
       const out = [];
@@ -1592,7 +1712,7 @@
         daysSched: new Set(past.map((x) => x.d)).size, daysTaught: new Set(past.filter((x) => x.rec && x.rec.present).map((x) => x.d)).size,
         planned: past.reduce((a, x) => a + x.planned, 0), taught: past.reduce((a, x) => a + taughtOf(x), 0),
         off: past.filter((x) => x.rec).reduce((a, x) => a + Math.max(0, x.planned - taughtOf(x)), 0), unset: past.filter((x) => !x.rec).length,
-        amount: past.reduce((a, x) => a + taughtOf(x) * rateOf(x.c), 0),
+        amount: past.reduce((a, x) => a + taughtOf(x) * U.recRate(teacher, x.c, tid, x.rec, x.d), 0),
       };
     };
     const scheduleCard = () => {
@@ -1602,7 +1722,8 @@
       const days = Object.keys(byDay).sort();
       const sessionRow = (x) => {
         const stt = stateOf(x), off = stt === 'part' ? x.planned - taughtOf(x) : 0.5;
-        return `<div class="tsess ${x.future ? 'future' : ''}"><div class="grow"><b>${esc(x.c.name)}</b> <span class="badge ${U.roleOf(x.c, tid) === 'main' ? 'blue' : ''}">${U.roleName(U.roleOf(x.c, tid))}</span> <span class="small muted">${esc(U.timeText(U.slotFor(x.c, x.d)))} · ${x.planned} tiết</span></div>
+        return `<div class="tsess ${x.future ? 'future' : ''}"><div class="grow"><b>${esc(x.c.name)}</b> <span class="small muted">${esc(U.timeText(U.slotFor(x.c, x.d)))} · ${x.planned} tiết · ${money(U.recRate(teacher, x.c, tid, x.rec, x.d))}/tiết</span></div>
+          ${x.future ? '' : `<select class="select" data-trole="${x.key}" style="width:auto" title="Vai trò của giáo viên ở buổi này">${[['main', 'Giáo viên chính'], ['assistant', 'Trợ giảng']].map(([v, l]) => `<option value="${v}" ${v === (roleSel[x.key] || U.recRole(x.c, tid, x.rec)) ? 'selected' : ''}>${l}</option>`).join('')}</select>`}
           ${x.future ? '<span class="small muted">Chưa đến ngày dạy</span>' : `<select class="select" data-st="${x.key}" style="width:auto">${[['unset', 'Chưa điểm danh'], ['full', 'Dạy đủ'], ['none', 'Nghỉ cả buổi'], ['part', 'Nghỉ một số tiết']].map(([v, l]) => `<option value="${v}" ${v === stt ? 'selected' : ''}>${l}</option>`).join('')}</select>
           <label class="small muted ${stt === 'part' ? '' : 'hidden'}">Nghỉ <input class="input" type="number" min="0.5" max="${x.planned}" step="0.5" data-off="${x.key}" value="${off}" style="width:76px"> tiết</label>`}</div>`;
       };
@@ -1638,6 +1759,12 @@
           ${s.unset ? `<div class="alert warn" style="margin-top:10px">Còn ${s.unset} buổi đã qua chưa điểm danh, chưa tính vào số tiết đã dạy.</div>` : ''}
           <div class="small muted" style="margin-top:10px">Đơn giá: ${money(teacher.rateMain)}/tiết khi dạy chính, ${money(teacher.rateAssistant)}/tiết khi trợ giảng. Chỉ tính từ ngày giáo viên bắt đầu dạy.${admin ? ' <a href="#/payroll">Xem bảng lương tất cả giáo viên</a>' : ''}</div></div></div>`;
     };
+    /* vai trò + đơn giá chốt cho buổi (có thể đổi vai trò riêng từng buổi) */
+    const roleSel = {};
+    const snapFor = (c, d, prev, key) => {
+      const sn = U.snap(teacher, c, tid, d, prev);
+      return roleSel[key] && roleSel[key] !== sn.role ? { role: roleSel[key], rate: U.rateAt(teacher, roleSel[key], d) } : sn;
+    };
     /* ghi trạng thái của một buổi dạy cho giáo viên này */
     const setState = async (key, stt, offV) => {
       const [cid, d] = key.split('|'), c = App.classById(cid), id = `${cid}_${d}`;
@@ -1645,10 +1772,11 @@
       const old = await fresh('teacherAttendance', id, tAtt.find((z) => z.id === id));
       const records = { ...((old && old.records) || {}) };
       const prevNote = (records[tid] && records[tid].note) || '';
+      const sn = snapFor(c, d, records[tid], key);
       if (stt === 'unset') delete records[tid];
-      else if (stt === 'none') records[tid] = { present: false, periods: 0, planned, note: prevNote };
-      else if (stt === 'part') { const o = Math.min(planned, Math.max(0.5, Number(offV) || 0.5)); records[tid] = { present: true, periods: planned - o, planned, note: prevNote }; }
-      else records[tid] = { present: true, periods: planned, planned, note: '' };
+      else if (stt === 'none') records[tid] = { present: false, periods: 0, planned, note: prevNote, ...sn };
+      else if (stt === 'part') { const o = Math.min(planned, Math.max(0.5, Number(offV) || 0.5)); records[tid] = { present: true, periods: planned - o, planned, note: prevNote, ...sn }; }
+      else records[tid] = { present: true, periods: planned, planned, note: '', ...sn };
       const data = { classId: cid, teacherId: c.teacherId || '', teacherIds: U.classTeachers(c), date: d, records, updatedBy: App.me.name };
       await DB.save('teacherAttendance', id, data, true);
       tAtt = tAtt.filter((z) => z.id !== id).concat([{ id, ...data }]);
@@ -1682,6 +1810,16 @@
     root.onchange = async (e) => {
       const t = e.target;
       if (t.dataset.cell) { cells[t.dataset.cell].on = t.checked; counts(); return; }
+      if (t.dataset.trole) {
+        const key = t.dataset.trole;
+        roleSel[key] = t.value;
+        try {
+          const x = items().find((i) => i.key === key);
+          if (x && x.rec) await setState(key, stateOf(x), x.planned - taughtOf(x));
+          U.toast('Đã đổi vai trò của buổi này', 'ok');
+        } catch (er) { U.toast(er.message, 'err'); }
+        keepScroll(render); return;
+      }
       if (t.dataset.st || t.dataset.off) {
         const key = t.dataset.st || t.dataset.off, row = t.closest('.tsess');
         const stt = t.dataset.st ? t.value : row.querySelector('[data-st]').value, offV = t.dataset.off ? t.value : (row.querySelector('[data-off]') || {}).value;
@@ -1772,7 +1910,7 @@
             const old = await fresh('teacherAttendance', id, tAtt.find((z) => z.id === id));
             const records = { ...((old && old.records) || {}) };
             const prevNote = (records[tid] && records[tid].note) || '';
-            g.items.forEach((x) => { records[tid] = x.on ? { present: true, periods: x.planned, planned: x.planned, note: '' } : { present: false, periods: 0, planned: x.planned, note: prevNote }; });
+            g.items.forEach((x) => { const sn = snapFor(x.c, x.d, records[tid], x.key); records[tid] = x.on ? { present: true, periods: x.planned, planned: x.planned, note: '', ...sn } : { present: false, periods: 0, planned: x.planned, note: prevNote, ...sn }; });
             const data = { classId: g.c.id, teacherId: g.c.teacherId || '', teacherIds: U.classTeachers(g.c), date: g.d, records, updatedBy: App.me.name };
             await DB.save('teacherAttendance', id, data, true);
             tAtt = tAtt.filter((z) => z.id !== id).concat([{ id, ...data }]);

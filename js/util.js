@@ -80,6 +80,69 @@
   U.roleOf = (cls, teacherId) => (cls.teacherId === teacherId ? 'main' : 'assistant');
   U.roleName = (r) => (r === 'main' ? 'Giáo viên chính' : 'Trợ giảng');
 
+  /* ---------- Vai trò & đơn giá theo thời điểm ----------
+   * Đơn giá lưu thành lịch sử (user.rates = [{from, main, assistant}]), mỗi mục có hiệu lực từ ngày `from`.
+   * Mỗi lần điểm danh giáo viên lưu kèm vai trò (role) và đơn giá (rate) của chính buổi đó, nên đổi đơn giá hay đổi phân công
+   * về sau không làm thay đổi tiền của các buổi đã dạy. */
+  U.rateAt = (t, role, date) => {
+    const key = role === 'main' ? 'main' : 'assistant';
+    const h = ((t && t.rates) || []).slice().sort((a, b) => (a.from || '').localeCompare(b.from || ''));
+    if (h.length) {
+      let pick = h[0];
+      for (const e of h) if ((e.from || '') <= (date || '9999-12-31')) pick = e;
+      return Number(pick[key]) || 0;
+    }
+    return Number(t && (role === 'main' ? t.rateMain : t.rateAssistant)) || 0;
+  };
+  /* Thêm một mức đơn giá có hiệu lực từ ngày `from`; các ngày trước đó giữ nguyên mức cũ. Trả về phần cần ghi vào tài khoản giáo viên. */
+  U.rateChange = (t, main, assistant, from) => {
+    const rates = ((t && t.rates) || []).map((e) => ({ ...e }));
+    if (!rates.length && t && (t.rateMain || t.rateAssistant)) rates.push({ from: '', main: Number(t.rateMain) || 0, assistant: Number(t.rateAssistant) || 0 });
+    const i = rates.findIndex((e) => (e.from || '') === from);
+    const ent = { from, main: Math.max(0, Number(main) || 0), assistant: Math.max(0, Number(assistant) || 0) };
+    if (i >= 0) rates[i] = ent; else rates.push(ent);
+    rates.sort((a, b) => (a.from || '').localeCompare(b.from || ''));
+    const now = { rates };
+    return { rates, rateMain: U.rateAt(now, 'main', U.today()), rateAssistant: U.rateAt(now, 'assistant', U.today()) };
+  };
+  /* hộp thoại đổi đơn giá theo thời điểm: ghi thêm một mức mới, không sửa các mức cũ */
+  U.rateDialog = (t, done) => {
+    const m = U.modal({
+      title: `Đổi đơn giá tiết: ${t.name}`, okText: 'Lưu đơn giá',
+      body: `<label class="f">Có hiệu lực từ ngày</label><input class="input" type="date" id="rf" value="${U.today()}">
+        <label class="f" style="margin-top:10px">Giáo viên chính (đ/tiết)</label><input class="input" type="number" min="0" step="1000" id="rm" value="${U.rateAt(t, 'main', U.today())}">
+        <label class="f" style="margin-top:10px">Trợ giảng (đ/tiết)</label><input class="input" type="number" min="0" step="1000" id="ra" value="${U.rateAt(t, 'assistant', U.today())}">
+        <div class="hint">Các buổi dạy trước ngày này giữ nguyên đơn giá cũ. Từng buổi vẫn có thể nhập đơn giá riêng ở mục Điểm danh.</div>`,
+      onOk: async (w) => {
+        const from = w.querySelector('#rf').value;
+        if (!from) throw new Error('Chọn ngày có hiệu lực.');
+        await DB.save('users', t.id, U.rateChange(t, w.querySelector('#rm').value, w.querySelector('#ra').value, from));
+        U.toast('Đã lưu đơn giá mới', 'ok');
+        if (done) await done();
+      },
+    });
+    return m;
+  };
+  /* Chốt vai trò + đơn giá vào các buổi cũ của lớp chưa có, để đổi phân công / đơn giá sau này không làm đổi tiền đã tính */
+  U.freezeTeacherRecs = async (cls) => {
+    if (!cls || !cls.id) return;
+    const docs = await DB.list('teacherAttendance', [['classId', '==', cls.id]]);
+    for (const d of docs) {
+      const records = d.records || {};
+      let changed = false;
+      for (const [tid, rec] of Object.entries(records)) {
+        if (rec && rec.role && rec.rate != null) continue;
+        const t = ((window.App && App.teachers) || []).find((x) => x.id === tid) || {};
+        records[tid] = { ...rec, ...U.snap(t, cls, tid, d.date, rec) }; changed = true;
+      }
+      if (changed) await DB.save('teacherAttendance', d.id, { records });
+    }
+  };
+  U.recRole = (cls, tid, rec) => (rec && rec.role) || U.roleOf(cls, tid);
+  U.recRate = (t, cls, tid, rec, date) => (rec && rec.rate != null && rec.rate !== '' ? Number(rec.rate) || 0 : U.rateAt(t, U.recRole(cls, tid, rec), date));
+  /* vai trò + đơn giá chốt cho một buổi (giữ nguyên nếu buổi đó đã có) */
+  U.snap = (t, cls, tid, date, prev) => ({ role: U.recRole(cls, tid, prev), rate: U.recRate(t, cls, tid, prev, date) });
+
   /* Ngày giáo viên bắt đầu dạy lớp: lớn nhất của ngày bắt đầu làm việc, ngày được phân công vào lớp và ngày khai giảng */
   U.teachFrom = (cls, tid, teachers) => {
     const t = (teachers || (window.App && App.teachers) || []).find((x) => x.id === tid) || {};
@@ -100,10 +163,10 @@
           const t = teachers.find((x) => x.id === tid) || { id: tid, name: '(đã xóa)' };
           // chưa đến ngày giáo viên bắt đầu dạy: không tính nghỉ
           if (d.date < U.teachFrom(cls, tid, teachers) && !(rec && rec.present)) continue;
-          const role = U.roleOf(cls, tid);
-          const rate = Number(role === 'main' ? t.rateMain : t.rateAssistant) || 0;
+          const role = U.recRole(cls, tid, rec);
+          const rate = U.recRate(t, cls, tid, rec, d.date);
           const r = (byT[tid] = byT[tid] || newRow(t));
-          const key = cls.id + '|' + role;
+          const key = cls.id + '|' + role + '|' + rate;
           const ln = (r.lines[key] = r.lines[key] || { dset: new Set(), cls, role, rate, sessions: 0, absent: 0, partial: 0, periods: 0, planned: 0, off: 0, amount: 0, deduct: 0, gross: 0 });
           // số tiết theo lịch của buổi đó; nghỉ cả buổi hoặc nghỉ một số tiết đều bị trừ tiền
           const planned = rec && rec.planned != null ? Number(rec.planned) : Number(U.slotFor(cls, d.date).periods) || Number(cls.periods) || 0;

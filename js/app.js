@@ -52,6 +52,7 @@
     { name: 'attendance', label: 'Điểm danh', icon: 'attendance', group: 'Lớp học' },
     { name: 'assessments', label: 'Đánh giá & điểm', icon: 'star', group: 'Lớp học' },
     { name: 'tuition', label: 'Học phí', icon: 'wallet', group: 'Lớp học' },
+    { name: 'tuitionStats', label: 'Thống kê học phí', icon: 'dashboard', group: 'Lớp học' },
     { name: 'staff', label: 'Giáo viên', icon: 'teachers', admin: true },
     { name: 'payroll', label: 'Công & lương GV', icon: 'clock', admin: true },
     { name: 'assign', label: 'Phân công & đơn giá', icon: 'teachers', admin: true },

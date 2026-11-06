@@ -36,8 +36,8 @@
       <div><label class="f">Tên đăng nhập *</label><input class="input" id="e" value="${esc(u ? U.userName(u.email) : (params.new && params.new !== '1' ? '' : ''))}" ${u ? 'disabled' : ''} autocapitalize="none" placeholder="ví dụ: ngoc.nguyen">${u ? '' : '<div class="hint">3-30 ký tự: chữ không dấu, số, dấu . _ - (hoặc nhập email). Không được trùng tên đã có.</div>'}</div>
       <div><label class="f">Số điện thoại</label><input class="input" id="p" value="${esc(u ? u.phone || '' : '')}"></div>
       <div class="tonly"><label class="f">Bắt đầu làm việc từ ngày</label><input class="input" type="date" id="ws" value="${esc(u ? u.workStart || '' : '')}"><div class="hint">Điểm danh giáo viên chỉ tính từ ngày này.</div></div>
-      <div class="tonly"><label class="f">Đơn giá mỗi tiết - giáo viên chính (đ)</label><input class="input" type="number" min="0" step="1000" id="rm" value="${esc(u ? u.rateMain || 0 : 100000)}"></div>
-      <div class="tonly"><label class="f">Đơn giá mỗi tiết - trợ giảng (đ)</label><input class="input" type="number" min="0" step="1000" id="ra" value="${esc(u ? u.rateAssistant || 0 : 60000)}"></div>
+      <div class="tonly"><label class="f">Đơn giá mỗi tiết - giáo viên chính (đ)</label><input class="input" type="number" min="0" step="1000" id="rm" value="${esc(u ? U.rateAt(u, 'main', U.today()) : 100000)}"></div>
+      <div class="tonly"><label class="f">Đơn giá mỗi tiết - trợ giảng (đ)</label><input class="input" type="number" min="0" step="1000" id="ra" value="${esc(u ? U.rateAt(u, 'assistant', U.today()) : 60000)}"><div class="hint">${u ? 'Đổi đơn giá chỉ có hiệu lực từ hôm nay, các buổi đã dạy giữ nguyên. Muốn chọn ngày hiệu lực khác: mục Phân công & đơn giá.' : ''}</div></div>
       ${u ? `<div class="full"><label class="f">Trạng thái</label><select class="select" id="a" ${u.id === App.me.uid ? 'disabled' : ''}><option value="1">Hoạt động</option><option value="0" ${u.active === false ? 'selected' : ''}>Khóa tài khoản</option></select>${u.id === App.me.uid ? '<div class="hint">Bạn không thể tự khóa tài khoản đang đăng nhập.</div>' : ''}</div>`
         : '<div class="full"><label class="f">Mật khẩu ban đầu * (tối thiểu 6 ký tự)</label><input class="input" id="pw" type="text" autocomplete="off"></div>'}</div>`;
     const showRole = (m, role) => m.el.querySelectorAll('.tonly').forEach((x) => { x.style.display = role === 'teacher' ? '' : 'none'; });
@@ -75,7 +75,7 @@
             const v = (id) => w.querySelector('#' + id).value.trim();
             if (!v('n')) throw new Error('Nhập họ tên.');
             const data = { name: v('n'), phone: v('p'), active: u.id === App.me.uid ? true : w.querySelector('#a').value === '1' };
-            if (u.role === 'teacher') Object.assign(data, { workStart: v('ws'), rateMain: Number(v('rm')) || 0, rateAssistant: Number(v('ra')) || 0 });
+            if (u.role === 'teacher') { Object.assign(data, { workStart: v('ws') }); const nm = Number(v('rm')) || 0, na = Number(v('ra')) || 0; if (nm !== U.rateAt(u, 'main', U.today()) || na !== U.rateAt(u, 'assistant', U.today())) Object.assign(data, U.rateChange(u, nm, na, U.today())); }
             await DB.save('users', u.id, data);
             U.toast('Đã lưu', 'ok'); await App.refreshTeachers(); App.render();
           },
